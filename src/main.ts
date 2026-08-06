@@ -11,14 +11,14 @@ const MAX_BOUNCES = 5;
 type GameState = "playing" | "aiming" | "bullet" | "recover" | "won" | "lost";
 
 interface Enemy {
-  body: Phaser.GameObjects.Arc;
-  halo: Phaser.GameObjects.Arc;
+  body: Phaser.GameObjects.Sprite;
+  halo: Phaser.GameObjects.Ellipse;
   speed: number;
   alive: boolean;
 }
 
 interface Bullet {
-  body: Phaser.GameObjects.Arc;
+  body: Phaser.GameObjects.Sprite;
   trail: Phaser.GameObjects.Graphics;
   vx: number;
   vy: number;
@@ -28,8 +28,8 @@ interface Bullet {
 }
 
 class BulletReclaimerScene extends Phaser.Scene {
-  private player!: Phaser.GameObjects.Arc;
-  private playerRing!: Phaser.GameObjects.Arc;
+  private player!: Phaser.GameObjects.Sprite;
+  private playerRing!: Phaser.GameObjects.Ellipse;
   private playerDirection = new Phaser.Math.Vector2(1, 0);
   private enemies: Enemy[] = [];
   private obstacles: Phaser.Geom.Rectangle[] = [];
@@ -49,11 +49,12 @@ class BulletReclaimerScene extends Phaser.Scene {
 
   create(): void {
     this.cameras.main.setBackgroundColor("#080b12");
+    this.createPixelTextures();
     this.drawArena();
     this.createHud();
 
-    this.playerRing = this.add.circle(190, 550, 22, 0x7ee8fa, 0.12);
-    this.player = this.add.circle(190, 550, 13, 0xeffaff).setStrokeStyle(3, 0x49d7ef);
+    this.playerRing = this.add.ellipse(190, 561, 38, 13, 0x03070b, 0.72);
+    this.player = this.add.sprite(190, 550, "hero").setScale(2).setOrigin(0.5, 0.7);
     this.aimGuide = this.add.graphics();
     this.overlay = this.add.graphics();
 
@@ -119,44 +120,102 @@ class BulletReclaimerScene extends Phaser.Scene {
     this.playerRing.setPosition(this.player.x, this.player.y);
   }
 
+  private createPixelTextures(): void {
+    if (this.textures.exists("hero")) return;
+    const g = this.make.graphics({ x: 0, y: 0 });
+    const makeTexture = (key: string, width: number, height: number, draw: () => void) => {
+      g.clear();
+      draw();
+      g.generateTexture(key, width, height);
+    };
+
+    makeTexture("hero", 16, 20, () => {
+      g.fillStyle(0x1a1026).fillRect(4, 0, 8, 3);
+      g.fillStyle(0xf3d1bd).fillRect(5, 3, 6, 5);
+      g.fillStyle(0xfff3d2).fillRect(7, 4, 1, 1);
+      g.fillStyle(0x283e72).fillRect(3, 8, 10, 8);
+      g.fillStyle(0x5978ae).fillRect(4, 9, 8, 5);
+      g.fillStyle(0xe8edf7).fillRect(2, 10, 2, 5);
+      g.fillStyle(0x121a35).fillRect(4, 16, 3, 4).fillRect(9, 16, 3, 4);
+    });
+
+    makeTexture("enemy", 16, 16, () => {
+      g.fillStyle(0x4b1932).fillRect(2, 3, 12, 10);
+      g.fillStyle(0x8b3152).fillRect(1, 6, 14, 7);
+      g.fillStyle(0xc65b6d).fillRect(3, 4, 10, 8);
+      g.fillStyle(0x250d1d).fillRect(4, 7, 2, 2).fillRect(10, 7, 2, 2);
+      g.fillStyle(0xffd070).fillRect(4, 7, 1, 1).fillRect(11, 7, 1, 1);
+      g.fillStyle(0x3a1426).fillRect(5, 13, 2, 3).fillRect(9, 13, 2, 3);
+    });
+
+    makeTexture("bullet", 6, 6, () => {
+      g.fillStyle(0xa6552d).fillRect(1, 0, 4, 6);
+      g.fillStyle(0xffd76b).fillRect(0, 1, 6, 4);
+      g.fillStyle(0xfff4bd).fillRect(2, 2, 2, 2);
+    });
+
+    makeTexture("spark", 8, 8, () => {
+      g.fillStyle(0xffd76b).fillRect(3, 0, 2, 8).fillRect(0, 3, 8, 2);
+      g.fillStyle(0xfff7d2).fillRect(3, 3, 2, 2);
+    });
+    g.destroy();
+  }
+
   private drawArena(): void {
-    const grid = this.add.graphics();
-    grid.lineStyle(1, 0x173044, 0.54);
-    for (let x = ARENA.x; x <= ARENA.right; x += 42) grid.lineBetween(x, ARENA.y, x, ARENA.bottom);
-    for (let y = ARENA.y; y <= ARENA.bottom; y += 42) grid.lineBetween(ARENA.x, y, ARENA.right, y);
+    const floor = this.add.graphics();
+    floor.fillStyle(0x10131f).fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+    floor.fillStyle(0x172234).fillRect(ARENA.x, ARENA.y, ARENA.width, ARENA.height);
+    for (let y = ARENA.y + 6; y < ARENA.bottom; y += 24) {
+      for (let x = ARENA.x + 6; x < ARENA.right; x += 24) {
+        const shift = ((x / 24 + y / 24) % 2 === 0) ? 0x1c2a3e : 0x19263a;
+        floor.fillStyle(shift, 1).fillRect(x, y, 20, 20);
+        floor.fillStyle(0x263750, 0.45).fillRect(x + 2, y + 2, 3, 2);
+      }
+    }
 
     const frame = this.add.graphics();
-    frame.fillStyle(0x0d1722, 0.86).fillRoundedRect(ARENA.x, ARENA.y, ARENA.width, ARENA.height, 16);
-    frame.lineStyle(3, 0x2a6381, 1).strokeRoundedRect(ARENA.x, ARENA.y, ARENA.width, ARENA.height, 16);
-    frame.lineStyle(1, 0x80dfff, 0.35).strokeRoundedRect(ARENA.x + 7, ARENA.y + 7, ARENA.width - 14, ARENA.height - 14, 11);
+    frame.fillStyle(0x071019).fillRect(ARENA.x - 10, ARENA.y - 10, ARENA.width + 20, 10);
+    frame.fillStyle(0x071019).fillRect(ARENA.x - 10, ARENA.bottom, ARENA.width + 20, 10);
+    frame.fillStyle(0x071019).fillRect(ARENA.x - 10, ARENA.y, 10, ARENA.height);
+    frame.fillStyle(0x071019).fillRect(ARENA.right, ARENA.y, 10, ARENA.height);
+    frame.fillStyle(0x57728f).fillRect(ARENA.x - 5, ARENA.y - 5, ARENA.width + 10, 5);
+    frame.fillStyle(0x314860).fillRect(ARENA.x - 5, ARENA.bottom, ARENA.width + 10, 5);
+    frame.fillStyle(0x46647f).fillRect(ARENA.x - 5, ARENA.y, 5, ARENA.height);
+    frame.fillStyle(0x20384e).fillRect(ARENA.right, ARENA.y, 5, ARENA.height);
+    frame.fillStyle(0x9fc3d6, 0.52).fillRect(ARENA.x, ARENA.y, ARENA.width, 2);
 
-    this.add.text(54, 24, "BULLET RECLAIMER", {
-      fontFamily: "system-ui, sans-serif",
-      fontSize: "28px",
+    this.add.text(54, 23, "BULLET RECLAIMER", {
+      fontFamily: "monospace",
+      fontSize: "26px",
       fontStyle: "bold",
-      color: "#ecfbff",
-      letterSpacing: 2,
+      color: "#f5e2c2",
+      letterSpacing: 1,
+    });
+    this.add.text(55, 54, "ONE SHOT · NO MERCY", {
+      fontFamily: "monospace",
+      fontSize: "12px",
+      color: "#9b7b6d",
     });
   }
 
   private createHud(): void {
     this.statusText = this.add.text(1226, 28, "", {
-      fontFamily: "system-ui, sans-serif",
-      fontSize: "18px",
+      fontFamily: "monospace",
+      fontSize: "16px",
       fontStyle: "bold",
       color: "#f8fbff",
     }).setOrigin(1, 0);
 
     this.objectiveText = this.add.text(54, 678, "", {
-      fontFamily: "system-ui, sans-serif",
-      fontSize: "17px",
-      color: "#a6bdcc",
+      fontFamily: "monospace",
+      fontSize: "14px",
+      color: "#b7a99a",
     });
 
     this.add.text(GAME_WIDTH / 2, 43, "WASD 이동  ·  마우스 누름: 시간 정지 조준  ·  놓기: 발사  ·  R: 재시작", {
-      fontFamily: "system-ui, sans-serif",
-      fontSize: "15px",
-      color: "#7fa0b3",
+      fontFamily: "monospace",
+      fontSize: "13px",
+      color: "#b8a58d",
     }).setOrigin(0.5);
   }
 
@@ -172,9 +231,13 @@ class BulletReclaimerScene extends Phaser.Scene {
 
     const obstacleLayer = this.add.graphics();
     for (const rect of this.obstacles) {
-      obstacleLayer.fillStyle(0x1b3347, 1).fillRoundedRect(rect.x, rect.y, rect.width, rect.height, 9);
-      obstacleLayer.lineStyle(2, 0x5284a1, 0.9).strokeRoundedRect(rect.x, rect.y, rect.width, rect.height, 9);
-      obstacleLayer.lineStyle(1, 0xa6e6ff, 0.22).lineBetween(rect.x + 10, rect.y + 12, rect.right - 10, rect.y + 12);
+      obstacleLayer.fillStyle(0x101722).fillRect(rect.x - 4, rect.y - 4, rect.width + 8, rect.height + 8);
+      obstacleLayer.fillStyle(0x3b4d62).fillRect(rect.x, rect.y, rect.width, rect.height);
+      obstacleLayer.fillStyle(0x637a8b).fillRect(rect.x, rect.y, rect.width, 6);
+      obstacleLayer.fillStyle(0x28394d).fillRect(rect.x, rect.bottom - 8, rect.width, 8);
+      for (let x = rect.x + 10; x < rect.right - 5; x += 20) {
+        obstacleLayer.fillStyle(0x91a7af, 0.38).fillRect(x, rect.y + 12, 7, 4);
+      }
     }
 
     this.enemies = [
@@ -186,8 +249,8 @@ class BulletReclaimerScene extends Phaser.Scene {
   }
 
   private makeEnemy(x: number, y: number, speed: number): Enemy {
-    const halo = this.add.circle(x, y, 21, 0xff5e79, 0.1);
-    const body = this.add.circle(x, y, 12, 0xff637b).setStrokeStyle(3, 0xffb2bd);
+    const halo = this.add.ellipse(x, y + 13, 40, 13, 0x240b18, 0.55);
+    const body = this.add.sprite(x, y, "enemy").setScale(2).setOrigin(0.5, 0.72);
     return { body, halo, speed, alive: true };
   }
 
@@ -213,7 +276,7 @@ class BulletReclaimerScene extends Phaser.Scene {
     }
   }
 
-  private tryMoveCircle(body: Phaser.GameObjects.Arc, dx: number, dy: number, radius: number): void {
+  private tryMoveCircle(body: Phaser.GameObjects.Sprite, dx: number, dy: number, radius: number): void {
     const nextX = Phaser.Math.Clamp(body.x + dx, ARENA.x + radius, ARENA.right - radius);
     const nextY = Phaser.Math.Clamp(body.y + dy, ARENA.y + radius, ARENA.bottom - radius);
     if (!this.circleHitsObstacle(nextX, body.y, radius)) body.x = nextX;
@@ -237,8 +300,7 @@ class BulletReclaimerScene extends Phaser.Scene {
 
     this.state = "bullet";
     const trail = this.add.graphics();
-    const body = this.add.circle(this.player.x + direction.x * 20, this.player.y + direction.y * 20, 8, 0xffdb70)
-      .setStrokeStyle(2, 0xfff3bd);
+    const body = this.add.sprite(this.player.x + direction.x * 24, this.player.y + direction.y * 20, "bullet").setScale(2);
     this.bullet = { body, trail, vx: direction.x * BULLET_SPEED, vy: direction.y * BULLET_SPEED, bounces: 0, age: 0, stopped: false };
     this.updateHud();
   }
@@ -355,7 +417,7 @@ class BulletReclaimerScene extends Phaser.Scene {
       const nextX = x + vx * hit.distance;
       const nextY = y + vy * hit.distance;
       this.aimGuide.lineBetween(x, y, nextX, nextY);
-      this.aimGuide.fillStyle(0x8df3ff, 0.95).fillCircle(nextX, nextY, 4);
+      this.aimGuide.fillStyle(0xffe18a, 0.95).fillRect(nextX - 3, nextY - 3, 6, 6);
       x = nextX + hit.normalX * 1.5;
       y = nextY + hit.normalY * 1.5;
       if (hit.normalX) vx *= -1;
@@ -410,7 +472,7 @@ class BulletReclaimerScene extends Phaser.Scene {
     if (this.state === "lost" || this.state === "won") return;
     this.state = "lost";
     this.overlay.clear().fillStyle(0x2c0710, 0.7).fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
-    this.player.setFillStyle(0xff7890);
+    this.player.setTint(0xff7890);
     this.showCenterMessage("YOU WERE HIT", "한 발은 적도, 나도 즉사시킨다 · 클릭 또는 R로 재시작");
     this.updateHud();
   }
@@ -447,5 +509,5 @@ new Phaser.Game({
   height: GAME_HEIGHT,
   scene: [BulletReclaimerScene],
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
-  render: { antialias: true, pixelArt: false },
+  render: { antialias: false, pixelArt: true, roundPixels: true },
 });
