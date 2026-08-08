@@ -14,7 +14,7 @@ export interface RiskReward {
 const clamp01 = (value: number): number => Math.max(0, Math.min(1, value));
 
 export function enemyPressureMultiplier(unarmed: boolean, latePressure: boolean): number {
-  return (unarmed ? 1.14 : 1) * (latePressure ? 1.08 : 1);
+  return (unarmed ? 1.2 : 1) * (latePressure ? 1.08 : 1);
 }
 
 export function calculateRiskReward(input: RiskInput): RiskReward {

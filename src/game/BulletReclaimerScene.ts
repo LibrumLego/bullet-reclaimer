@@ -17,6 +17,7 @@ import { findNavigationPath } from "./pathfinding";
 import { calculateRiskReward, enemyPressureMultiplier } from "./risk";
 import { SoundManager } from "./SoundManager";
 import { STAGES } from "./stages";
+import { canEnemiesMove, canPlayerMove, isEnemyMovementBlocked } from "./stateRules";
 import type { Bullet, Enemy, EnemyDefinition, GameState, StageDefinition } from "./types";
 
 type Impact =
@@ -176,11 +177,23 @@ export class BulletReclaimerScene extends Phaser.Scene {
     this.aimGuide.clear();
     if (this.state !== "won" && this.state !== "lost") this.overlay.clear();
 
-    if (this.state === "playing" || this.state === "bullet" || this.state === "recover") {
+    if (canPlayerMove(this.state)) {
       this.movePlayer(dt);
+    } else if (this.state === "bullet") {
+      this.playerVelocity.set(0, 0);
+      this.player.setScale(2);
+    }
+
+    if (canEnemiesMove(this.state)) {
       this.moveEnemies(dt);
       this.checkEnemyNearMisses();
       this.checkEnemyContact();
+    } else if (this.state === "bullet") {
+      for (const enemy of this.enemies) {
+        if (!enemy.alive) continue;
+        this.updateEnemyThreatVisual(enemy, true);
+        this.syncEnemyVisual(enemy);
+      }
     }
 
     if (this.state === "bullet" && this.bullet) this.moveBullet(dt);
@@ -497,12 +510,12 @@ export class BulletReclaimerScene extends Phaser.Scene {
   }
 
   private moveEnemies(dt: number): void {
-    const unarmed = this.state === "bullet" || this.state === "recover";
+    const unarmed = this.state === "recover";
     const pressureMultiplier = enemyPressureMultiplier(unarmed, this.latePressure);
     for (const enemy of this.enemies) {
       if (!enemy.alive) continue;
       this.updateEnemyThreatVisual(enemy, unarmed);
-      if (this.updateEnemyDash(enemy, dt, pressureMultiplier)) continue;
+      if (this.updateEnemyDash(enemy, dt, pressureMultiplier, unarmed)) continue;
 
       const targetMoved = !Number.isFinite(enemy.lastTargetX)
         || Phaser.Math.Distance.Between(enemy.lastTargetX, enemy.lastTargetY, this.player.x, this.player.y) > 24;
@@ -516,7 +529,10 @@ export class BulletReclaimerScene extends Phaser.Scene {
           enemy.radius,
         );
         enemy.pathIndex = 0;
-        enemy.nextPathAt = this.time.now + (enemy.kind === "boss" ? 220 : 300) + Phaser.Math.Between(0, 90);
+        const pathInterval = unarmed
+          ? enemy.kind === "boss" ? 120 : 175
+          : enemy.kind === "boss" ? 220 : 300;
+        enemy.nextPathAt = this.time.now + pathInterval + Phaser.Math.Between(0, 70);
         enemy.lastTargetX = this.player.x;
         enemy.lastTargetY = this.player.y;
       }
@@ -545,7 +561,8 @@ export class BulletReclaimerScene extends Phaser.Scene {
       }
       this.tryMoveCircle(enemy.body, enemy.moveVx * dt, enemy.moveVy * dt, enemy.radius);
       const moved = Phaser.Math.Distance.Between(previousX, previousY, enemy.body.x, enemy.body.y);
-      if (moved < chaseSpeed * dt * 0.2) {
+      const requestedDistance = Math.hypot(enemy.moveVx, enemy.moveVy) * dt;
+      if (isEnemyMovementBlocked(currentSpeed, chaseSpeed, moved, requestedDistance)) {
         enemy.moveVx *= 0.25;
         enemy.moveVy *= 0.25;
         enemy.path = [];
@@ -557,7 +574,7 @@ export class BulletReclaimerScene extends Phaser.Scene {
     }
   }
 
-  private updateEnemyDash(enemy: Enemy, dt: number, speedMultiplier: number): boolean {
+  private updateEnemyDash(enemy: Enemy, dt: number, speedMultiplier: number, aggressive: boolean): boolean {
     const now = this.time.now;
     if (enemy.dashState === "telegraph") {
       if (now < enemy.dashUntil) {
@@ -589,7 +606,7 @@ export class BulletReclaimerScene extends Phaser.Scene {
       if (Math.abs(enemy.dashVx) > 0.05) enemy.body.setFlipX(enemy.dashVx > 0);
       if (now >= enemy.dashUntil || moved < dashSpeed * dt * 0.35) {
         enemy.dashState = "chase";
-        enemy.dashReadyAt = now + Phaser.Math.Between(2600, 4600);
+        enemy.dashReadyAt = now + (aggressive ? Phaser.Math.Between(1500, 2600) : Phaser.Math.Between(2600, 4600));
         enemy.path = [];
         enemy.pathIndex = 0;
         enemy.nextPathAt = now + 80;
@@ -599,7 +616,8 @@ export class BulletReclaimerScene extends Phaser.Scene {
     }
 
     const playerDistance = Phaser.Math.Distance.Between(enemy.body.x, enemy.body.y, this.player.x, this.player.y);
-    if (enemy.canDash && now >= enemy.dashReadyAt && playerDistance > 120 && playerDistance < 520) {
+    const recoveryDash = aggressive && this.stageIndex > 0 && enemy.speed >= 65;
+    if ((enemy.canDash || recoveryDash) && now >= enemy.dashReadyAt && playerDistance > 120 && playerDistance < 520) {
       enemy.dashState = "telegraph";
       enemy.dashUntil = now + (enemy.kind === "boss" ? 560 : 430);
       this.sounds.dashWarning();
@@ -979,6 +997,17 @@ export class BulletReclaimerScene extends Phaser.Scene {
       this.bullet.body.x,
       this.bullet.body.y,
     );
+    for (const enemy of this.enemies) {
+      if (!enemy.alive) continue;
+      enemy.path = [];
+      enemy.pathIndex = 0;
+      enemy.nextPathAt = 0;
+      const recoveryDash = this.stageIndex > 0 && enemy.speed >= 65;
+      if (enemy.canDash || recoveryDash) {
+        enemy.dashReadyAt = Math.min(enemy.dashReadyAt, this.time.now + Phaser.Math.Between(420, 820));
+      }
+    }
+    this.showFloatingText(GAME_WIDTH / 2, 126, "RECOVERY HUNT", "#ffb36b");
     this.updateHud();
   }
 
@@ -1161,7 +1190,7 @@ export class BulletReclaimerScene extends Phaser.Scene {
       title: "READY · 작전 대기",
       playing: "ARMED · 한 발 장전됨",
       aiming: "TIME FROZEN · 경로를 설계하라",
-      bullet: "UNARMED · 탄환이 날아가는 중",
+      bullet: "TIME FROZEN · 탄도 해결 중 · 전장 정지",
       recover: "UNARMED · 탄환을 회수하라",
       won: this.stageIndex === STAGES.length - 1 ? "MISSION COMPLETE" : "AREA CLEARED",
       lost: "MISSION FAILED",

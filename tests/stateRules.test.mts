@@ -1,0 +1,20 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { canEnemiesMove, canPlayerMove, isEnemyMovementBlocked } from "../src/game/stateRules.ts";
+
+test("the player is locked while the fired bullet resolves", () => {
+  assert.equal(canPlayerMove("aiming"), false);
+  assert.equal(canPlayerMove("bullet"), false);
+  assert.equal(canPlayerMove("recover"), true);
+});
+
+test("enemies freeze while the bullet resolves and chase during recovery", () => {
+  assert.equal(canEnemiesMove("aiming"), false);
+  assert.equal(canEnemiesMove("bullet"), false);
+  assert.equal(canEnemiesMove("recover"), true);
+});
+
+test("enemy acceleration is not mistaken for being blocked", () => {
+  assert.equal(isEnemyMovementBlocked(8, 58, 0.03, 0.05), false);
+  assert.equal(isEnemyMovementBlocked(50, 58, 0, 0.3), true);
+});

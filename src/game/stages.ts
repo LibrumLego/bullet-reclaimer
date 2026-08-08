@@ -14,8 +14,8 @@ export const STAGES: StageDefinition[] = [
       { x: 620, y: 160, width: 130, height: 58 },
     ],
     enemies: [
-      { x: 640, y: 304, speed: 46 },
-      { x: 514, y: 590, speed: 40 },
+      { x: 640, y: 304, speed: 58 },
+      { x: 514, y: 590, speed: 54 },
     ],
   },
   {
