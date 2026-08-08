@@ -30,6 +30,7 @@ export interface StageDefinition {
 export interface Enemy {
   body: Phaser.GameObjects.Sprite;
   halo: Phaser.GameObjects.Ellipse;
+  eyeGlow: Phaser.GameObjects.Rectangle;
   speed: number;
   radius: number;
   kind: EnemyKind;
@@ -47,6 +48,9 @@ export interface Enemy {
   dashUntil: number;
   dashVx: number;
   dashVy: number;
+  moveVx: number;
+  moveVy: number;
+  nearMissReadyAt: number;
 }
 
 export interface Bullet {
@@ -59,4 +63,6 @@ export interface Bullet {
   stopped: boolean;
   kills: number;
   nearMissTriggered: boolean;
+  nearMisses: number;
+  recoveryDistance: number;
 }

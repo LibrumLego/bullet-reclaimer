@@ -19,11 +19,20 @@ export class SoundManager {
 
   reclaim(): void {
     this.tone(420, 0.14, "sine", 0.04, 880);
+    window.setTimeout(() => this.tone(660, 0.12, "triangle", 0.025, 1040), 65);
+  }
+
+  aimHeartbeat(): void {
+    this.tone(58, 0.09, "sine", 0.024, 44);
+    window.setTimeout(() => this.tone(52, 0.08, "sine", 0.018, 40), 125);
   }
 
   tension(intensity: number): void {
     const strength = Math.max(0, Math.min(1, intensity));
     this.tone(72 + strength * 34, 0.1, "sine", 0.012 + strength * 0.012, 58 + strength * 20);
+    if (strength > 0.72) {
+      window.setTimeout(() => this.tone(48, 0.16, "sawtooth", 0.01 + strength * 0.008, 36), 55);
+    }
   }
 
   dashWarning(): void {
