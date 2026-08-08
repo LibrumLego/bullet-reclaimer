@@ -52,6 +52,7 @@ export class BulletReclaimerScene extends Phaser.Scene {
   private aimStartedAt = 0;
   private readonly sounds = new SoundManager();
   private readonly handleWindowBlur = (): void => this.cancelAim();
+  private readonly focusGameCanvas = (): void => this.game.canvas.focus();
 
   constructor() {
     super("bullet-reclaimer");
@@ -77,6 +78,9 @@ export class BulletReclaimerScene extends Phaser.Scene {
     const stage = STAGES[this.stageIndex];
     this.time.timeScale = 1;
     this.cameras.main.setBackgroundColor("#080b12");
+    this.game.canvas.tabIndex = 0;
+    this.game.canvas.setAttribute("aria-label", "Bullet Reclaimer game canvas");
+    this.game.canvas.addEventListener("pointerdown", this.focusGameCanvas);
     this.createPixelTextures();
     this.drawArena();
     this.createHud(stage);
@@ -117,7 +121,10 @@ export class BulletReclaimerScene extends Phaser.Scene {
     this.input.on("pointerupoutside", () => this.cancelAim());
     this.input.on("gameout", () => this.cancelAim());
     window.addEventListener("blur", this.handleWindowBlur);
-    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => window.removeEventListener("blur", this.handleWindowBlur));
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      window.removeEventListener("blur", this.handleWindowBlur);
+      this.game.canvas.removeEventListener("pointerdown", this.focusGameCanvas);
+    });
 
     this.createStage(stage);
     if (this.state === "title") this.showTitleScreen();
@@ -1002,7 +1009,7 @@ export class BulletReclaimerScene extends Phaser.Scene {
     const alive = this.enemies.filter((enemy) => enemy.alive).length;
     const boss = this.enemies.find((enemy) => enemy.alive && enemy.kind === "boss");
     const status: Record<GameState, string> = {
-      title: "AWAITING DEPLOYMENT",
+      title: "READY · 작전 대기",
       playing: "ARMED · 한 발 장전됨",
       aiming: "TIME FROZEN · 경로를 설계하라",
       bullet: "UNARMED · 탄환이 날아가는 중",
