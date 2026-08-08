@@ -77,3 +77,6 @@ Windows 환경에서 개발 서버는 `127.0.0.1`에만 바인딩됩니다.
 
 - [AI 활용 기록](docs/ai-usage-log.md)
 - [사전과제 제출 체크리스트](docs/submission-checklist.md)
+- [게임 소개 및 설명 PDF](output/pdf/bullet-reclaimer-game-introduction.pdf)
+- [AI 활용 기술 PDF](output/pdf/bullet-reclaimer-ai-usage.pdf)
+- [45초 플레이 영상 촬영 구성](docs/video-shot-list.md)

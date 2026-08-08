@@ -2,11 +2,11 @@
 
 ## 필수 제출물
 
-- [ ] GitHub Pages 플레이 링크
-- [ ] 전체 소스 코드와 커밋 기록이 포함된 GitHub 저장소
+- [x] GitHub Pages 플레이 링크 — https://librumlego.github.io/bullet-reclaimer/
+- [x] 전체 소스 코드와 커밋 기록이 포함된 GitHub 저장소 — https://github.com/LibrumLego/bullet-reclaimer
 - [ ] 30~60초 실제 플레이 영상 YouTube 링크
-- [ ] 게임 소개 및 설명 PDF
-- [ ] AI 활용 기술 PDF
+- [x] 게임 소개 및 설명 PDF 초안 — `output/pdf/bullet-reclaimer-game-introduction.pdf`
+- [x] AI 활용 기술 PDF — `output/pdf/bullet-reclaimer-ai-usage.pdf`
 - [ ] 팀원 롤 기술 PDF — 2인 이상 팀일 때 필수
 
 ## 게임 소개 PDF 필수 내용
@@ -40,4 +40,4 @@
 - [x] 프레임 사이 탄환 충돌 회귀 테스트
 - [x] 5개 스테이지와 최종 보스 데이터 구성
 - [x] GitHub Pages 자동 배포 워크플로 구성
-- [ ] 최신 변경사항 커밋·푸시 후 배포 결과 확인
+- [x] 최신 변경사항 커밋·푸시 후 배포 결과 확인
