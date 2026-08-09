@@ -1003,7 +1003,8 @@ export class BulletReclaimerScene extends Phaser.Scene {
       return;
     }
 
-    this.bossPatternUntil = this.time.now + Math.max(620, 980 - phase * 50);
+    // Cover lands first; the player gets a readable window to choose a side or use it as a shield.
+    this.bossPatternUntil = this.time.now + Math.max(1120, 1580 - phase * 90);
     const landing = this.findSafeBossLanding(this.player.x + this.playerVelocity.x * 0.4, this.player.y + this.playerVelocity.y * 0.4, enemy.radius);
     this.bossPatternTarget.set(landing.x, landing.y);
     this.bossTelegraph.clear().lineStyle(3, 0xffd37f, 0.86).strokeCircle(landing.x, landing.y, 46);
@@ -1062,14 +1063,14 @@ export class BulletReclaimerScene extends Phaser.Scene {
       this.temporaryCovers.push({
         rect,
         visual,
-        landingAt: this.time.now + 460,
-        expiresAt: this.time.now + 5900,
+        landingAt: this.time.now + 640,
+        expiresAt: this.time.now + 7000,
         active: false,
       });
       this.tweens.add({
         targets: visual,
         y: candidate.y,
-        duration: 460,
+        duration: 640,
         ease: "Cubic.In",
         onComplete: () => this.cameras.main.shake(60, 0.002),
       });
