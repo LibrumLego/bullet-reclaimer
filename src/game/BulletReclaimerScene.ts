@@ -38,6 +38,7 @@ export class BulletReclaimerScene extends Phaser.Scene {
   private wasd!: Record<"W" | "A" | "S" | "D" | "R", Phaser.Input.Keyboard.Key>;
   private startKeys!: Record<"ENTER" | "SPACE", Phaser.Input.Keyboard.Key>;
   private aimGuide!: Phaser.GameObjects.Graphics;
+  private aimWarningText!: Phaser.GameObjects.Text;
   private overlay!: Phaser.GameObjects.Graphics;
   private recoveryGuide!: Phaser.GameObjects.Graphics;
   private recoveryText!: Phaser.GameObjects.Text;
@@ -103,13 +104,22 @@ export class BulletReclaimerScene extends Phaser.Scene {
     ).setDepth(DEPTH.obstacle - 1).setAlpha(0);
     this.createHud(stage);
 
-    this.playerRing = this.add.ellipse(stage.player.x, stage.player.y + 11, 38, 13, 0x03070b, 0.72).setDepth(DEPTH.actor - 1);
+    this.playerRing = this.add.ellipse(stage.player.x, stage.player.y + 14, 44, 14, 0x02050c, 0.68).setDepth(DEPTH.actor - 1);
     this.player = this.add.sprite(stage.player.x, stage.player.y, "hero")
-      .setScale(2)
-      .setOrigin(0.5, 0.7)
+      .setScale(1.7)
+      .setOrigin(0.5, 0.72)
       .setDepth(DEPTH.actor);
     this.overlay = this.add.graphics().setDepth(DEPTH.freeze);
     this.aimGuide = this.add.graphics().setDepth(DEPTH.guide);
+    this.aimWarningText = this.add.text(0, 0, "RETURN FIRE", {
+      fontFamily: '"Segoe UI", sans-serif',
+      fontSize: "11px",
+      fontStyle: "bold",
+      color: "#ff9b96",
+      backgroundColor: "#190d18",
+      padding: { x: 7, y: 4 },
+      letterSpacing: 1.4,
+    }).setOrigin(0.5).setDepth(DEPTH.guide + 1).setVisible(false);
     this.recoveryGuide = this.add.graphics().setDepth(DEPTH.guide);
     this.dangerVignette = this.add.graphics().setDepth(DEPTH.actor + 1);
     this.dangerVignette
@@ -120,7 +130,7 @@ export class BulletReclaimerScene extends Phaser.Scene {
       .fillRect(ARENA.right - 18, ARENA.y, 18, ARENA.height)
       .setAlpha(0);
     this.recoveryText = this.add.text(0, 0, "", {
-      fontFamily: "monospace",
+      fontFamily: '"Segoe UI", sans-serif',
       fontSize: "13px",
       fontStyle: "bold",
       color: "#ffd76b",
@@ -175,13 +185,14 @@ export class BulletReclaimerScene extends Phaser.Scene {
     }
 
     this.aimGuide.clear();
+    this.aimWarningText.setVisible(false);
     if (this.state !== "won" && this.state !== "lost") this.overlay.clear();
 
     if (canPlayerMove(this.state)) {
       this.movePlayer(dt);
     } else if (this.state === "bullet") {
       this.playerVelocity.set(0, 0);
-      this.player.setScale(2);
+      this.player.setTexture("hero").setScale(1.7);
     }
 
     if (canEnemiesMove(this.state)) {
@@ -213,8 +224,10 @@ export class BulletReclaimerScene extends Phaser.Scene {
       if (!enemy.alive) continue;
       const pulse = 1 + Math.sin(this.time.now * 0.005 + enemy.body.x) * (enemy.kind === "boss" ? 0.09 : 0.05);
       enemy.halo.setScale(pulse);
+      const eyePulse = 1 + Math.sin(this.time.now * 0.011 + enemy.body.y) * 0.12;
+      enemy.eyeGlow.setScale(eyePulse, 1);
     }
-    this.playerRing.setPosition(this.player.x, this.player.y + 11);
+    this.playerRing.setPosition(this.player.x, this.player.y + 14);
   }
 
   private createPixelTextures(): void {
@@ -226,24 +239,51 @@ export class BulletReclaimerScene extends Phaser.Scene {
       g.generateTexture(key, width, height);
     };
 
-    makeTexture("hero", 16, 20, () => {
-      g.fillStyle(0x1a1026).fillRect(4, 0, 8, 3);
-      g.fillStyle(0xf3d1bd).fillRect(5, 3, 6, 5);
-      g.fillStyle(0xfff3d2).fillRect(7, 4, 1, 1);
-      g.fillStyle(0x283e72).fillRect(3, 8, 10, 8);
-      g.fillStyle(0x5978ae).fillRect(4, 9, 8, 5);
-      g.fillStyle(0xe8edf7).fillRect(2, 10, 2, 5);
-      g.fillStyle(0x121a35).fillRect(4, 16, 3, 4).fillRect(9, 16, 3, 4);
-    });
+    const drawHero = (stride: boolean): void => {
+      // Amber scarf and long coat create a readable silhouette even at game scale.
+      g.fillStyle(0x8f4e38).fillRect(4, 10, 4, 13);
+      g.fillStyle(0xd8894d).fillRect(2, stride ? 12 : 11, 5, 4).fillRect(1, stride ? 15 : 14, 4, 2);
+      g.fillStyle(0x11192c).fillRect(7, 10, 11, 14);
+      g.fillStyle(0x263c59).fillRect(8, 11, 9, 11);
+      g.fillStyle(0x385d78).fillRect(9, 13, 7, 7);
+      g.fillStyle(0xdde4df).fillRect(8, 3, 9, 7);
+      g.fillStyle(0xf6eee0).fillRect(10, 4, 8, 5);
+      g.fillStyle(0xc8d1cd).fillRect(7, 2, 4, 5).fillRect(14, 1, 4, 3);
+      g.fillStyle(0x1c2638).fillRect(9, 8, 9, 3);
+      g.fillStyle(0x75e2df).fillRect(15, 7, 2, 2);
+      // Oversized reclaim gauntlet makes the hero feel authored rather than generic.
+      g.fillStyle(0x0b1322).fillRect(17, 12, 5, 8);
+      g.fillStyle(0x32647a).fillRect(18, 13, 5, 6);
+      g.fillStyle(0x92f2e7).fillRect(21, 14, 3, 3);
+      g.fillStyle(0xf3c86a).fillRect(22, 15, 2, 1);
+      if (stride) {
+        g.fillStyle(0x0a1020).fillRect(7, 22, 4, 6).fillRect(15, 21, 4, 5);
+        g.fillStyle(0x506c7c).fillRect(6, 26, 5, 2).fillRect(15, 25, 5, 2);
+      } else {
+        g.fillStyle(0x0a1020).fillRect(8, 22, 4, 6).fillRect(14, 22, 4, 6);
+        g.fillStyle(0x506c7c).fillRect(7, 26, 5, 2).fillRect(14, 26, 5, 2);
+      }
+    };
+    makeTexture("hero", 24, 28, () => drawHero(false));
+    makeTexture("hero-step", 24, 28, () => drawHero(true));
 
-    makeTexture("enemy", 16, 16, () => {
-      g.fillStyle(0x4b1932).fillRect(2, 3, 12, 10);
-      g.fillStyle(0x8b3152).fillRect(1, 6, 14, 7);
-      g.fillStyle(0xc65b6d).fillRect(3, 4, 10, 8);
-      g.fillStyle(0x250d1d).fillRect(4, 7, 2, 2).fillRect(10, 7, 2, 2);
-      g.fillStyle(0xffd070).fillRect(4, 7, 1, 1).fillRect(11, 7, 1, 1);
-      g.fillStyle(0x3a1426).fillRect(5, 13, 2, 3).fillRect(9, 13, 2, 3);
-    });
+    const drawHunter = (stride: boolean): void => {
+      g.fillStyle(0x180f20).fillRect(5, 4, 13, 13);
+      g.fillStyle(0x5b203d).fillRect(3, 7, 17, 9);
+      g.fillStyle(0xb74762).fillRect(5, 5, 13, 9);
+      g.fillStyle(0xe56a73).fillRect(7, 4, 9, 3);
+      g.fillStyle(0x25101f).fillRect(6, 8, 11, 4);
+      g.fillStyle(0xffe28a).fillRect(7, 9, 3, 2).fillRect(14, 9, 3, 2);
+      g.fillStyle(0xff786d).fillRect(4, 2, 3, 4).fillRect(16, 1, 3, 5);
+      g.fillStyle(0x371326).fillRect(1, 10, 4, 5).fillRect(18, 10, 4, 5);
+      if (stride) {
+        g.fillStyle(0x210f20).fillRect(5, 15, 4, 5).fillRect(15, 14, 4, 4);
+      } else {
+        g.fillStyle(0x210f20).fillRect(6, 15, 4, 5).fillRect(14, 15, 4, 5);
+      }
+    };
+    makeTexture("enemy", 22, 20, () => drawHunter(false));
+    makeTexture("enemy-step", 22, 20, () => drawHunter(true));
 
     makeTexture("boss", 36, 40, () => {
       g.fillStyle(0x140c24).fillRect(8, 4, 20, 32);
@@ -263,10 +303,11 @@ export class BulletReclaimerScene extends Phaser.Scene {
       g.fillStyle(0xf0c8ff).fillRect(3, 6, 2, 2).fillRect(31, 6, 2, 2).fillRect(17, 1, 2, 2);
     });
 
-    makeTexture("bullet", 6, 6, () => {
-      g.fillStyle(0xa6552d).fillRect(1, 0, 4, 6);
-      g.fillStyle(0xffd76b).fillRect(0, 1, 6, 4);
-      g.fillStyle(0xfff4bd).fillRect(2, 2, 2, 2);
+    makeTexture("bullet", 9, 5, () => {
+      g.fillStyle(0x69412c).fillRect(0, 1, 3, 3);
+      g.fillStyle(0xf0aa53).fillRect(2, 0, 5, 5);
+      g.fillStyle(0xfff1ae).fillRect(5, 1, 4, 3);
+      g.fillStyle(0xffffff).fillRect(7, 2, 2, 1);
     });
 
     makeTexture("spark", 8, 8, () => {
@@ -299,63 +340,80 @@ export class BulletReclaimerScene extends Phaser.Scene {
 
   private drawArena(): void {
     const floor = this.add.graphics().setDepth(DEPTH.arena);
-    floor.fillStyle(0x10131f).fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
-    floor.fillStyle(0x172234).fillRect(ARENA.x, ARENA.y, ARENA.width, ARENA.height);
-    for (let y = ARENA.y + 6; y < ARENA.bottom; y += 24) {
-      for (let x = ARENA.x + 6; x < ARENA.right; x += 24) {
-        const tileColor = (Math.floor(x / 24) + Math.floor(y / 24)) % 2 === 0 ? 0x1c2a3e : 0x19263a;
-        floor.fillStyle(tileColor).fillRect(x, y, 20, 20);
-        floor.fillStyle(0x263750, 0.45).fillRect(x + 2, y + 2, 3, 2);
+    floor.fillStyle(0x070a12).fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+    floor.fillStyle(0x101827).fillRect(ARENA.x, ARENA.y, ARENA.width, ARENA.height);
+    // Broad panels and tiny service lights read as a designed space instead of a checkerboard.
+    for (let y = ARENA.y; y < ARENA.bottom; y += 64) {
+      for (let x = ARENA.x; x < ARENA.right; x += 64) {
+        const alternate = (Math.floor(x / 64) + Math.floor(y / 64)) % 2 === 0;
+        floor.fillStyle(alternate ? 0x131e2e : 0x111b2a).fillRect(x + 2, y + 2, 60, 60);
+        floor.lineStyle(1, 0x22344a, 0.5).strokeRect(x + 2, y + 2, 60, 60);
+        floor.fillStyle(0x5a7891, 0.32).fillCircle(x + 8, y + 8, 1.5).fillCircle(x + 56, y + 56, 1.5);
       }
     }
+    floor.lineStyle(2, 0x1e4d5a, 0.34).lineBetween(ARENA.x + 18, ARENA.centerY, ARENA.right - 18, ARENA.centerY);
+    floor.fillStyle(0x5ce0d0, 0.22);
+    for (let x = ARENA.x + 34; x < ARENA.right; x += 156) floor.fillRect(x, ARENA.centerY - 1, 26, 2);
 
     const frame = this.add.graphics().setDepth(DEPTH.arena + 1);
-    frame.fillStyle(0x071019).fillRect(ARENA.x - 10, ARENA.y - 10, ARENA.width + 20, 10);
-    frame.fillStyle(0x071019).fillRect(ARENA.x - 10, ARENA.bottom, ARENA.width + 20, 10);
-    frame.fillStyle(0x071019).fillRect(ARENA.x - 10, ARENA.y, 10, ARENA.height);
-    frame.fillStyle(0x071019).fillRect(ARENA.right, ARENA.y, 10, ARENA.height);
-    frame.fillStyle(0x57728f).fillRect(ARENA.x - 5, ARENA.y - 5, ARENA.width + 10, 5);
-    frame.fillStyle(0x314860).fillRect(ARENA.x - 5, ARENA.bottom, ARENA.width + 10, 5);
-    frame.fillStyle(0x46647f).fillRect(ARENA.x - 5, ARENA.y, 5, ARENA.height);
-    frame.fillStyle(0x20384e).fillRect(ARENA.right, ARENA.y, 5, ARENA.height);
-    frame.fillStyle(0x9fc3d6, 0.52).fillRect(ARENA.x, ARENA.y, ARENA.width, 2);
+    frame.fillStyle(0x03060d).fillRect(ARENA.x - 9, ARENA.y - 9, ARENA.width + 18, 9);
+    frame.fillStyle(0x03060d).fillRect(ARENA.x - 9, ARENA.bottom, ARENA.width + 18, 9);
+    frame.fillStyle(0x03060d).fillRect(ARENA.x - 9, ARENA.y, 9, ARENA.height);
+    frame.fillStyle(0x03060d).fillRect(ARENA.right, ARENA.y, 9, ARENA.height);
+    frame.lineStyle(2, 0x486277, 0.86).strokeRect(ARENA.x - 3, ARENA.y - 3, ARENA.width + 6, ARENA.height + 6);
+    frame.lineStyle(3, 0x76eadc, 0.72);
+    const corner = 34;
+    frame.lineBetween(ARENA.x, ARENA.y, ARENA.x + corner, ARENA.y).lineBetween(ARENA.x, ARENA.y, ARENA.x, ARENA.y + corner);
+    frame.lineBetween(ARENA.right, ARENA.bottom, ARENA.right - corner, ARENA.bottom).lineBetween(ARENA.right, ARENA.bottom, ARENA.right, ARENA.bottom - corner);
 
     this.add.text(54, 22, "BULLET RECLAIMER", {
-      fontFamily: "monospace",
-      fontSize: "26px",
+      fontFamily: '"Segoe UI", sans-serif',
+      fontSize: "23px",
       fontStyle: "bold",
-      color: "#f5e2c2",
-      letterSpacing: 1,
+      color: "#edf7f4",
+      letterSpacing: 3,
     }).setDepth(DEPTH.hud);
   }
 
   private showTitleScreen(): void {
-    this.overlay.clear().fillStyle(0x050812, 0.9).fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+    this.overlay.clear().fillStyle(0x040812, 0.88).fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
 
-    const title = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 92, "BULLET RECLAIMER", {
-      fontFamily: "monospace",
-      fontSize: "50px",
+    const operative = this.add.sprite(425, 358, "hero").setScale(6.6).setOrigin(0.5, 0.72);
+    const operativeGlow = this.add.ellipse(425, 430, 210, 42, 0x5ce0d0, 0.13);
+    const kicker = this.add.text(626, 242, "TACTICAL RICOCHET // 01", {
+      fontFamily: '"Segoe UI", sans-serif',
+      fontSize: "13px",
       fontStyle: "bold",
-      color: "#f5e2c2",
-      stroke: "#172238",
-      strokeThickness: 8,
-    }).setOrigin(0.5);
-    const mission = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 22, "총알은 단 한 발. 쏜 뒤에는 직접 회수하라.", {
-      fontFamily: "monospace",
-      fontSize: "18px",
-      color: "#b8d7e2",
-    }).setOrigin(0.5);
-    const prompt = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 62, "[ 클릭 / ENTER / SPACE ]  작전 시작", {
-      fontFamily: "monospace",
-      fontSize: "20px",
+      color: "#76eadc",
+      letterSpacing: 2.5,
+    });
+    const title = this.add.text(620, 278, "BULLET\nRECLAIMER", {
+      fontFamily: '"Segoe UI", sans-serif',
+      fontSize: "54px",
       fontStyle: "bold",
-      color: "#ffd76b",
-      backgroundColor: "#151d2e",
-      padding: { x: 18, y: 10 },
-    }).setOrigin(0.5);
+      color: "#f2f7f5",
+      lineSpacing: -7,
+      letterSpacing: 2,
+    });
+    const mission = this.add.text(626, 405, "단 한 발로 길을 만들고,\n무장 해제된 전장을 가로질러 회수하라.", {
+      fontFamily: '"Segoe UI", sans-serif',
+      fontSize: "16px",
+      color: "#aec4cb",
+      lineSpacing: 7,
+    });
+    const prompt = this.add.text(626, 486, "DEPLOY  ·  CLICK / ENTER / SPACE", {
+      fontFamily: '"Segoe UI", sans-serif',
+      fontSize: "14px",
+      fontStyle: "bold",
+      color: "#071119",
+      backgroundColor: "#76eadc",
+      padding: { x: 18, y: 11 },
+      letterSpacing: 1.5,
+    });
 
-    this.titleLayer = this.add.container(0, 0, [title, mission, prompt]).setDepth(DEPTH.message);
-    this.tweens.add({ targets: prompt, alpha: 0.45, duration: 700, yoyo: true, repeat: -1 });
+    this.titleLayer = this.add.container(0, 0, [operativeGlow, operative, kicker, title, mission, prompt]).setDepth(DEPTH.message);
+    this.tweens.add({ targets: operative, y: operative.y - 5, duration: 1200, ease: "Sine.easeInOut", yoyo: true, repeat: -1 });
+    this.tweens.add({ targets: prompt, alpha: 0.68, duration: 800, yoyo: true, repeat: -1 });
   }
 
   private startGame(): void {
@@ -372,42 +430,45 @@ export class BulletReclaimerScene extends Phaser.Scene {
 
   private createHud(stage: StageDefinition): void {
     this.statusText = this.add.text(1226, 26, "", {
-      fontFamily: "monospace",
-      fontSize: "16px",
+      fontFamily: '"Segoe UI", sans-serif',
+      fontSize: "14px",
       fontStyle: "bold",
       color: "#f8fbff",
+      letterSpacing: 1.1,
     }).setOrigin(1, 0).setDepth(DEPTH.hud);
 
     this.stageText = this.add.text(54, 58, `STAGE ${this.stageIndex + 1}/${STAGES.length} · ${stage.name} — ${stage.briefing}`, {
-      fontFamily: "monospace",
-      fontSize: "13px",
-      color: "#c5a987",
+      fontFamily: '"Segoe UI", sans-serif',
+      fontSize: "12px",
+      color: "#9fb4bc",
+      letterSpacing: 0.6,
     }).setDepth(DEPTH.hud);
 
     this.objectiveText = this.add.text(54, 678, "", {
-      fontFamily: "monospace",
-      fontSize: "14px",
-      color: "#b7a99a",
+      fontFamily: '"Segoe UI", sans-serif',
+      fontSize: "13px",
+      color: "#a5b8be",
     }).setDepth(DEPTH.hud);
 
     this.scoreText = this.add.text(1226, 678, "", {
-      fontFamily: "monospace",
-      fontSize: "14px",
+      fontFamily: '"Segoe UI", sans-serif',
+      fontSize: "13px",
       fontStyle: "bold",
       color: "#ffd76b",
     }).setOrigin(1, 0).setDepth(DEPTH.hud);
 
     this.riskText = this.add.text(1226, 58, "", {
-      fontFamily: "monospace",
-      fontSize: "13px",
+      fontFamily: '"Segoe UI", sans-serif',
+      fontSize: "12px",
       fontStyle: "bold",
       color: "#ffdf72",
     }).setOrigin(1, 0).setDepth(DEPTH.hud);
 
     this.add.text(GAME_WIDTH / 2, 40, "WASD 이동  ·  마우스 누름: 시간 정지 조준  ·  놓기: 발사  ·  R: 재시작", {
-      fontFamily: "monospace",
-      fontSize: "13px",
-      color: "#b8a58d",
+      fontFamily: '"Segoe UI", sans-serif',
+      fontSize: "12px",
+      color: "#80969f",
+      letterSpacing: 0.4,
     }).setOrigin(0.5).setDepth(DEPTH.hud);
   }
 
@@ -415,12 +476,22 @@ export class BulletReclaimerScene extends Phaser.Scene {
     this.obstacles = stage.obstacles.map((item) => new Phaser.Geom.Rectangle(item.x, item.y, item.width, item.height));
     const obstacleLayer = this.add.graphics().setDepth(DEPTH.obstacle);
     for (const rect of this.obstacles) {
-      obstacleLayer.fillStyle(0x101722).fillRect(rect.x - 4, rect.y - 4, rect.width + 8, rect.height + 8);
-      obstacleLayer.fillStyle(0x3b4d62).fillRect(rect.x, rect.y, rect.width, rect.height);
-      obstacleLayer.fillStyle(0x637a8b).fillRect(rect.x, rect.y, rect.width, 6);
-      obstacleLayer.fillStyle(0x28394d).fillRect(rect.x, rect.bottom - 8, rect.width, 8);
-      for (let x = rect.x + 10; x < rect.right - 5; x += 20) {
-        obstacleLayer.fillStyle(0x91a7af, 0.38).fillRect(x, rect.y + 12, 7, 4);
+      obstacleLayer.fillStyle(0x050912, 0.85).fillRect(rect.x + 6, rect.y + 7, rect.width + 3, rect.height + 3);
+      obstacleLayer.fillStyle(0x182638).fillRect(rect.x, rect.y, rect.width, rect.height);
+      obstacleLayer.fillStyle(0x263b50).fillRect(rect.x + 4, rect.y + 4, rect.width - 8, rect.height - 8);
+      obstacleLayer.fillStyle(0x355268).fillRect(rect.x + 4, rect.y + 4, rect.width - 8, 4);
+      obstacleLayer.fillStyle(0x101b2a).fillRect(rect.x + 7, rect.bottom - 10, rect.width - 14, 6);
+      obstacleLayer.lineStyle(2, 0x6c8ba0, 0.58).strokeRect(rect.x, rect.y, rect.width, rect.height);
+      obstacleLayer.lineStyle(2, 0x76eadc, 0.5)
+        .lineBetween(rect.x, rect.y, rect.x + 15, rect.y)
+        .lineBetween(rect.x, rect.y, rect.x, rect.y + 15);
+      for (let x = rect.x + 13; x < rect.right - 8; x += 28) {
+        obstacleLayer.fillStyle(0x94b3c2, 0.46).fillCircle(x, rect.y + 14, 2);
+      }
+      if (rect.width > 110) {
+        for (let x = rect.x + 12; x < rect.right - 18; x += 34) {
+          obstacleLayer.fillStyle(0xd69a4c, 0.5).fillRect(x, rect.bottom - 8, 16, 3);
+        }
       }
     }
     this.enemies = stage.enemies.map((definition) => this.makeEnemy(definition));
@@ -441,12 +512,12 @@ export class BulletReclaimerScene extends Phaser.Scene {
       0.62,
     ).setDepth(DEPTH.actor - 1);
     const body = this.add.sprite(definition.x, definition.y, kind === "boss" ? "boss" : "enemy")
-      .setScale(kind === "boss" ? 2.65 : 2)
+      .setScale(kind === "boss" ? 2.65 : 1.72)
       .setOrigin(0.5, 0.72)
       .setDepth(DEPTH.actor);
     const eyeGlow = this.add.rectangle(
       definition.x,
-      definition.y - (kind === "boss" ? 17 : 9),
+      definition.y - (kind === "boss" ? 17 : 7),
       kind === "boss" ? 34 : 17,
       kind === "boss" ? 6 : 4,
       kind === "boss" ? 0xe9b7ff : 0xffdf72,
@@ -505,8 +576,11 @@ export class BulletReclaimerScene extends Phaser.Scene {
     if (Math.abs(this.playerVelocity.x) > 8) this.player.setFlipX(this.playerVelocity.x < 0);
 
     const movement = Math.min(1, this.playerVelocity.length() / PLAYER_SPEED);
-    const step = Math.sin(this.time.now * 0.018) * 0.055 * movement;
-    this.player.setScale(2 - Math.abs(step) * 0.35, 2 + step);
+    const stepPhase = Math.floor(this.time.now / 115) % 2 === 0;
+    this.player.setTexture(movement > 0.14 && stepPhase ? "hero-step" : "hero");
+    const step = Math.sin(this.time.now * 0.026) * 0.045 * movement;
+    const breathing = Math.sin(this.time.now * 0.004) * 0.012 * (1 - movement);
+    this.player.setScale(1.7 - Math.abs(step) * 0.28, 1.7 + step + breathing);
   }
 
   private moveEnemies(dt: number): void {
@@ -627,8 +701,13 @@ export class BulletReclaimerScene extends Phaser.Scene {
   }
 
   private syncEnemyVisual(enemy: Enemy): void {
+    if (enemy.kind !== "boss") {
+      const moving = Math.hypot(enemy.moveVx, enemy.moveVy) > 12 || enemy.dashState === "dashing";
+      const stepPhase = Math.floor((this.time.now + enemy.body.x * 2) / 125) % 2 === 0;
+      enemy.body.setTexture(moving && stepPhase ? "enemy-step" : "enemy");
+    }
     enemy.halo.setPosition(enemy.body.x, enemy.body.y + (enemy.kind === "boss" ? 27 : 13));
-    enemy.eyeGlow.setPosition(enemy.body.x, enemy.body.y - (enemy.kind === "boss" ? 17 : 9));
+    enemy.eyeGlow.setPosition(enemy.body.x, enemy.body.y - (enemy.kind === "boss" ? 17 : 7));
   }
 
   private restoreEnemyAppearance(enemy: Enemy): void {
@@ -688,6 +767,7 @@ export class BulletReclaimerScene extends Phaser.Scene {
     this.resumeEnemyClocks();
     this.overlay.clear();
     this.aimGuide.clear();
+    this.aimWarningText.setVisible(false);
     this.state = "bullet";
     const trail = this.add.graphics().setDepth(DEPTH.effects);
     const body = this.add.sprite(
@@ -696,6 +776,7 @@ export class BulletReclaimerScene extends Phaser.Scene {
       "bullet",
     )
       .setScale(2)
+      .setRotation(direction.angle())
       .setDepth(DEPTH.effects);
     this.bullet = {
       body,
@@ -722,7 +803,7 @@ export class BulletReclaimerScene extends Phaser.Scene {
     let remaining = BULLET_SPEED * dt;
     let safety = 0;
     bullet.trail.clear();
-    bullet.trail.lineStyle(3, 0xffd76b, 0.58);
+    bullet.trail.lineStyle(2, 0xffd98a, 0.72);
 
     while (remaining > 0.01 && safety++ < 8 && !bullet.stopped) {
       const direction = new Phaser.Math.Vector2(bullet.vx, bullet.vy).normalize();
@@ -746,6 +827,7 @@ export class BulletReclaimerScene extends Phaser.Scene {
       bullet.bounces += 1;
       if (wallHit.normalX !== 0) bullet.vx *= -1;
       if (wallHit.normalY !== 0) bullet.vy *= -1;
+      bullet.body.setRotation(Math.atan2(bullet.vy, bullet.vx));
       bullet.body.x += wallHit.normalX * 1.5;
       bullet.body.y += wallHit.normalY * 1.5;
       this.burst(bullet.body.x, bullet.body.y, 0x7ee8fa, 5);
@@ -921,26 +1003,70 @@ export class BulletReclaimerScene extends Phaser.Scene {
     return nearestCombinedRayHit(candidates);
   }
 
+  private drawDashedTrajectory(
+    x1: number,
+    y1: number,
+    x2: number,
+    y2: number,
+    color: number,
+    alpha: number,
+    width: number,
+  ): void {
+    const distance = Phaser.Math.Distance.Between(x1, y1, x2, y2);
+    if (distance < 0.01) return;
+    const dx = (x2 - x1) / distance;
+    const dy = (y2 - y1) / distance;
+    this.aimGuide.lineStyle(width, color, alpha);
+    for (let cursor = 0; cursor < distance; cursor += 18) {
+      const end = Math.min(cursor + 10, distance);
+      this.aimGuide.lineBetween(x1 + dx * cursor, y1 + dy * cursor, x1 + dx * end, y1 + dy * end);
+    }
+  }
+
   private drawAimGuide(): void {
     this.drawFreezeOverlay();
     this.aimGuide.clear();
+    this.aimWarningText.setVisible(false);
     const pointer = this.input.activePointer;
     const direction = new Phaser.Math.Vector2(pointer.worldX - this.player.x, pointer.worldY - this.player.y);
     if (direction.lengthSq() === 0) return;
     direction.normalize();
-    this.aimGuide.lineStyle(2, 0xe9feff, 0.96);
 
     let x = this.player.x + direction.x * BULLET_MUZZLE_OFFSET;
     let y = this.player.y + direction.y * BULLET_MUZZLE_OFFSET;
     let vx = direction.x;
     let vy = direction.y;
+    this.aimGuide.fillStyle(0xe8fffb, 0.92).fillCircle(x, y, 2.5);
     for (let i = 0; i < MAX_BOUNCES; i++) {
       const hit = this.findRayHit(x, y, vx, vy, 2000);
       if (!hit) break;
       const nextX = x + vx * hit.distance;
       const nextY = y + vy * hit.distance;
-      this.aimGuide.lineBetween(x, y, nextX, nextY);
-      this.aimGuide.fillStyle(0x8df3ff, 0.95).fillCircle(nextX, nextY, 4);
+      const selfHit = i > 0
+        ? segmentCircleHit(x, y, nextX, nextY, this.player.x, this.player.y, PLAYER_RADIUS + BULLET_RADIUS + 2)
+        : undefined;
+      const segmentColor = selfHit !== undefined ? 0xff817d : i === 0 ? 0xbaf8ee : 0x78aeb5;
+      const segmentAlpha = selfHit !== undefined ? 0.95 : Math.max(0.3, 0.72 - i * 0.09);
+      this.drawDashedTrajectory(x, y, nextX, nextY, segmentColor, segmentAlpha, selfHit !== undefined ? 2.4 : 1.35);
+
+      if (selfHit !== undefined) {
+        const dangerX = Phaser.Math.Linear(x, nextX, selfHit);
+        const dangerY = Phaser.Math.Linear(y, nextY, selfHit);
+        this.aimGuide.lineStyle(2, 0xff817d, 0.95)
+          .lineBetween(dangerX - 7, dangerY - 7, dangerX + 7, dangerY + 7)
+          .lineBetween(dangerX + 7, dangerY - 7, dangerX - 7, dangerY + 7);
+        this.aimWarningText
+          .setPosition(
+            Phaser.Math.Clamp(dangerX, ARENA.left + 56, ARENA.right - 56),
+            Phaser.Math.Clamp(dangerY - 28, ARENA.top + 18, ARENA.bottom - 18),
+          )
+          .setVisible(true);
+        break;
+      }
+
+      const markerAlpha = Math.max(0.3, 0.82 - i * 0.1);
+      this.aimGuide.lineStyle(1.5, 0x9de9df, markerAlpha)
+        .strokeRect(nextX - 4, nextY - 4, 8, 8);
       x = nextX + hit.normalX * 1.5;
       y = nextY + hit.normalY * 1.5;
       if (hit.normalX) vx *= -1;
@@ -950,8 +1076,10 @@ export class BulletReclaimerScene extends Phaser.Scene {
 
   private drawFreezeOverlay(): void {
     this.overlay.clear();
-    this.overlay.fillStyle(0x04131c, 0.48).fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
-    this.overlay.lineStyle(2, 0x63e6ff, 0.3).strokeRoundedRect(ARENA.x + 2, ARENA.y + 2, ARENA.width - 4, ARENA.height - 4, 14);
+    this.overlay.fillStyle(0x06101d, 0.34).fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+    this.overlay.fillStyle(0x76eadc, 0.16).fillRect(ARENA.x, ARENA.y, 3, ARENA.height);
+    this.overlay.fillStyle(0x76eadc, 0.07).fillRect(ARENA.right - 3, ARENA.y, 3, ARENA.height);
+    this.overlay.lineStyle(1, 0xb7fff3, 0.16).strokeRect(ARENA.x + 5, ARENA.y + 5, ARENA.width - 10, ARENA.height - 10);
   }
 
   private cancelAim(): void {
@@ -960,6 +1088,7 @@ export class BulletReclaimerScene extends Phaser.Scene {
     this.state = "playing";
     this.overlay.clear();
     this.aimGuide.clear();
+    this.aimWarningText.setVisible(false);
     this.updateHud();
   }
 

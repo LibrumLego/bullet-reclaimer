@@ -19,12 +19,13 @@ body,
 
 body {
   background:
-    radial-gradient(circle at 50% 25%, rgb(22 32 54 / 70%), transparent 45%),
-    #05070c;
+    radial-gradient(circle at 50% 22%, rgb(34 79 88 / 42%), transparent 42%),
+    linear-gradient(135deg, #05070d 0%, #090e18 55%, #05070c 100%);
 }
 
 canvas {
   display: block;
   image-rendering: pixelated;
   image-rendering: crisp-edges;
+  filter: saturate(1.05) contrast(1.025);
 }
