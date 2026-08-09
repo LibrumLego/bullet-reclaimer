@@ -25,6 +25,8 @@ type Impact =
   | { t: number; kind: "enemy"; enemy: Enemy };
 
 const BULLET_MUZZLE_OFFSET = Math.max(0, PLAYER_RADIUS - BULLET_RADIUS - 2);
+const AUTHORING_ARENA = { x: 54, y: 86, width: 1172, height: 574 };
+const ENEMY_BASE_SPEED_MULTIPLIER = 1.12;
 
 export class BulletReclaimerScene extends Phaser.Scene {
   private player!: Phaser.GameObjects.Sprite;
@@ -37,6 +39,7 @@ export class BulletReclaimerScene extends Phaser.Scene {
   private cursorKeys!: Phaser.Types.Input.Keyboard.CursorKeys;
   private wasd!: Record<"W" | "A" | "S" | "D" | "R", Phaser.Input.Keyboard.Key>;
   private startKeys!: Record<"ENTER" | "SPACE", Phaser.Input.Keyboard.Key>;
+  private cancelKey!: Phaser.Input.Keyboard.Key;
   private aimGuide!: Phaser.GameObjects.Graphics;
   private aimWarningText!: Phaser.GameObjects.Text;
   private overlay!: Phaser.GameObjects.Graphics;
@@ -62,6 +65,7 @@ export class BulletReclaimerScene extends Phaser.Scene {
   private readonly sounds = new SoundManager();
   private readonly handleWindowBlur = (): void => this.cancelAim();
   private readonly focusGameCanvas = (): void => this.game.canvas.focus();
+  private readonly suppressContextMenu = (event: MouseEvent): void => event.preventDefault();
 
   constructor() {
     super("bullet-reclaimer");
@@ -85,13 +89,42 @@ export class BulletReclaimerScene extends Phaser.Scene {
     this.playerVelocity.set(0, 0);
   }
 
+  private compactPoint(point: { x: number; y: number }): { x: number; y: number } {
+    const scaleX = ARENA.width / AUTHORING_ARENA.width;
+    const scaleY = ARENA.height / AUTHORING_ARENA.height;
+    return {
+      x: ARENA.x + (point.x - AUTHORING_ARENA.x) * scaleX,
+      y: ARENA.y + (point.y - AUTHORING_ARENA.y) * scaleY,
+    };
+  }
+
+  private compactEnemy(definition: EnemyDefinition): EnemyDefinition {
+    const point = this.compactPoint(definition);
+    return { ...definition, ...point };
+  }
+
+  private compactStage(stage: StageDefinition): StageDefinition {
+    const scaleX = ARENA.width / AUTHORING_ARENA.width;
+    const scaleY = ARENA.height / AUTHORING_ARENA.height;
+    return {
+      ...stage,
+      player: this.compactPoint(stage.player),
+      obstacles: stage.obstacles.map((obstacle) => {
+        const point = this.compactPoint(obstacle);
+        return { ...obstacle, ...point, width: obstacle.width * scaleX, height: obstacle.height * scaleY };
+      }),
+      enemies: stage.enemies.map((enemy) => this.compactEnemy(enemy)),
+    };
+  }
+
   create(): void {
-    const stage = STAGES[this.stageIndex];
+    const stage = this.compactStage(STAGES[this.stageIndex]);
     this.time.timeScale = 1;
     this.cameras.main.setBackgroundColor("#080b12");
     this.game.canvas.tabIndex = 0;
     this.game.canvas.setAttribute("aria-label", "Bullet Reclaimer game canvas");
     this.game.canvas.addEventListener("pointerdown", this.focusGameCanvas);
+    this.game.canvas.addEventListener("contextmenu", this.suppressContextMenu);
     this.createPixelTextures();
     this.drawArena();
     this.pressureWash = this.add.rectangle(
@@ -141,8 +174,15 @@ export class BulletReclaimerScene extends Phaser.Scene {
     this.cursorKeys = this.input.keyboard!.createCursorKeys();
     this.wasd = this.input.keyboard!.addKeys("W,A,S,D,R") as Record<"W" | "A" | "S" | "D" | "R", Phaser.Input.Keyboard.Key>;
     this.startKeys = this.input.keyboard!.addKeys("ENTER,SPACE") as Record<"ENTER" | "SPACE", Phaser.Input.Keyboard.Key>;
+    this.cancelKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.ESC);
 
-    this.input.on("pointerdown", () => this.handlePointerDown());
+    this.input.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
+      if (pointer.rightButtonDown()) {
+        this.cancelAim();
+        return;
+      }
+      this.handlePointerDown();
+    });
     this.input.on("pointerup", (pointer: Phaser.Input.Pointer) => {
       if (this.state === "aiming") this.fire(pointer.worldX, pointer.worldY);
     });
@@ -152,6 +192,7 @@ export class BulletReclaimerScene extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       window.removeEventListener("blur", this.handleWindowBlur);
       this.game.canvas.removeEventListener("pointerdown", this.focusGameCanvas);
+      this.game.canvas.removeEventListener("contextmenu", this.suppressContextMenu);
     });
 
     this.createStage(stage);
@@ -175,6 +216,10 @@ export class BulletReclaimerScene extends Phaser.Scene {
     }
 
     if (this.state === "aiming") {
+      if (Phaser.Input.Keyboard.JustDown(this.cancelKey)) {
+        this.cancelAim();
+        return;
+      }
       this.playerVelocity.set(0, 0);
       this.drawAimGuide();
       if (this.time.now >= this.tensionPulseAt) {
@@ -464,7 +509,7 @@ export class BulletReclaimerScene extends Phaser.Scene {
       color: "#ffdf72",
     }).setOrigin(1, 0).setDepth(DEPTH.hud);
 
-    this.add.text(GAME_WIDTH / 2, 40, "WASD 이동  ·  마우스 누름: 시간 정지 조준  ·  놓기: 발사  ·  R: 재시작", {
+    this.add.text(GAME_WIDTH / 2, 40, "WASD 이동  ·  마우스 누름: 시간 정지 조준  ·  놓기: 발사  ·  우클릭/ESC: 취소  ·  R: 재시작", {
       fontFamily: '"Segoe UI", sans-serif',
       fontSize: "12px",
       color: "#80969f",
@@ -528,7 +573,7 @@ export class BulletReclaimerScene extends Phaser.Scene {
       body,
       halo,
       eyeGlow,
-      speed: definition.speed,
+      speed: Math.round(definition.speed * ENEMY_BASE_SPEED_MULTIPLIER),
       radius,
       kind,
       health,
@@ -539,9 +584,9 @@ export class BulletReclaimerScene extends Phaser.Scene {
       nextPathAt: 0,
       lastTargetX: Number.NaN,
       lastTargetY: Number.NaN,
-      canDash: kind === "boss" || definition.speed >= 75,
+      canDash: kind === "boss" || definition.speed >= 54,
       dashState: "chase",
-      dashReadyAt: this.time.now + Phaser.Math.Between(1800, 4200),
+      dashReadyAt: this.time.now + Phaser.Math.Between(1100, 2300),
       dashUntil: 0,
       dashVx: 0,
       dashVy: 0,
@@ -604,8 +649,8 @@ export class BulletReclaimerScene extends Phaser.Scene {
         );
         enemy.pathIndex = 0;
         const pathInterval = unarmed
-          ? enemy.kind === "boss" ? 120 : 175
-          : enemy.kind === "boss" ? 220 : 300;
+          ? enemy.kind === "boss" ? 85 : 115
+          : enemy.kind === "boss" ? 150 : 200;
         enemy.nextPathAt = this.time.now + pathInterval + Phaser.Math.Between(0, 70);
         enemy.lastTargetX = this.player.x;
         enemy.lastTargetY = this.player.y;
@@ -673,14 +718,14 @@ export class BulletReclaimerScene extends Phaser.Scene {
     if (enemy.dashState === "dashing") {
       const previousX = enemy.body.x;
       const previousY = enemy.body.y;
-      const dashSpeed = enemy.speed * speedMultiplier * (enemy.kind === "boss" ? 2.5 : 3.15);
+      const dashSpeed = enemy.speed * speedMultiplier * (enemy.kind === "boss" ? 2.75 : 3.4);
       this.tryMoveCircle(enemy.body, enemy.dashVx * dashSpeed * dt, enemy.dashVy * dashSpeed * dt, enemy.radius);
       const moved = Phaser.Math.Distance.Between(previousX, previousY, enemy.body.x, enemy.body.y);
       this.syncEnemyVisual(enemy);
       if (Math.abs(enemy.dashVx) > 0.05) enemy.body.setFlipX(enemy.dashVx > 0);
       if (now >= enemy.dashUntil || moved < dashSpeed * dt * 0.35) {
         enemy.dashState = "chase";
-        enemy.dashReadyAt = now + (aggressive ? Phaser.Math.Between(1500, 2600) : Phaser.Math.Between(2600, 4600));
+        enemy.dashReadyAt = now + (aggressive ? Phaser.Math.Between(800, 1400) : Phaser.Math.Between(1600, 2800));
         enemy.path = [];
         enemy.pathIndex = 0;
         enemy.nextPathAt = now + 80;
@@ -690,8 +735,8 @@ export class BulletReclaimerScene extends Phaser.Scene {
     }
 
     const playerDistance = Phaser.Math.Distance.Between(enemy.body.x, enemy.body.y, this.player.x, this.player.y);
-    const recoveryDash = aggressive && this.stageIndex > 0 && enemy.speed >= 65;
-    if ((enemy.canDash || recoveryDash) && now >= enemy.dashReadyAt && playerDistance > 120 && playerDistance < 520) {
+    const recoveryDash = aggressive && enemy.speed >= 60;
+    if ((enemy.canDash || recoveryDash) && now >= enemy.dashReadyAt && playerDistance > 105 && playerDistance < 620) {
       enemy.dashState = "telegraph";
       enemy.dashUntil = now + (enemy.kind === "boss" ? 560 : 430);
       this.sounds.dashWarning();
@@ -930,9 +975,10 @@ export class BulletReclaimerScene extends Phaser.Scene {
     this.sounds.phase();
     this.showFloatingText(enemy.body.x, enemy.body.y - 82, `CORE PHASE ${phase}`, "#e3a7ff");
 
-    const reinforcement = enemy.health === 2
+    const reinforcementAuthored = enemy.health === 2
       ? { x: 1160, y: 260, speed: 88 }
       : { x: 900, y: 120, speed: 94 };
+    const reinforcement = this.compactEnemy(reinforcementAuthored);
     if (!this.circleHitsObstacle(reinforcement.x, reinforcement.y, 12)) {
       const minion = this.makeEnemy(reinforcement);
       minion.dashReadyAt = this.time.now + 1100;

@@ -2,7 +2,8 @@ import Phaser from "phaser";
 
 export const GAME_WIDTH = 1280;
 export const GAME_HEIGHT = 720;
-export const ARENA = new Phaser.Geom.Rectangle(54, 86, 1172, 574);
+// The authored maps were intentionally compressed to keep recovery routes under pressure.
+export const ARENA = new Phaser.Geom.Rectangle(160, 123, 960, 500);
 export const PLAYER_SPEED = 250;
 export const PLAYER_ACCELERATION = 15;
 export const PLAYER_DECELERATION = 11;
