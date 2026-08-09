@@ -24,6 +24,16 @@ type Impact =
   | { t: number; kind: "player" }
   | { t: number; kind: "enemy"; enemy: Enemy };
 
+type BossPattern = "none" | "telegraph-charge" | "charging" | "telegraph-volley" | "telegraph-leap" | "leaping";
+
+interface TemporaryCover {
+  rect: Phaser.Geom.Rectangle;
+  visual: Phaser.GameObjects.Graphics;
+  landingAt: number;
+  expiresAt: number;
+  active: boolean;
+}
+
 const BULLET_MUZZLE_OFFSET = Math.max(0, PLAYER_RADIUS - BULLET_RADIUS - 2);
 const AUTHORING_ARENA = { x: 54, y: 86, width: 1172, height: 574 };
 const ENEMY_BASE_SPEED_MULTIPLIER = 1.12;
@@ -33,6 +43,7 @@ export class BulletReclaimerScene extends Phaser.Scene {
   private playerRing!: Phaser.GameObjects.Ellipse;
   private enemies: Enemy[] = [];
   private enemyProjectiles: EnemyProjectile[] = [];
+  private temporaryCovers: TemporaryCover[] = [];
   private obstacles: Phaser.Geom.Rectangle[] = [];
   private bullet?: Bullet;
   private state: GameState = "title";
@@ -54,6 +65,8 @@ export class BulletReclaimerScene extends Phaser.Scene {
   private stageText!: Phaser.GameObjects.Text;
   private scoreText!: Phaser.GameObjects.Text;
   private riskText!: Phaser.GameObjects.Text;
+  private bossPatternText!: Phaser.GameObjects.Text;
+  private bossTelegraph!: Phaser.GameObjects.Graphics;
   private recoveryPulse = 0;
   private initialEnemyCount = 0;
   private tensionPulseAt = 0;
@@ -62,6 +75,11 @@ export class BulletReclaimerScene extends Phaser.Scene {
   private combatTimeScale = 1;
   private aimStartedAt = 0;
   private nearMissCooldownAt = 0;
+  private bossPattern: BossPattern = "none";
+  private bossPatternUntil = 0;
+  private bossPatternNextAt = 0;
+  private bossPatternIndex = 0;
+  private readonly bossPatternTarget = new Phaser.Math.Vector2();
   private readonly playerVelocity = new Phaser.Math.Vector2();
   private readonly sounds = new SoundManager();
   private readonly handleWindowBlur = (): void => this.cancelAim();
@@ -76,6 +94,7 @@ export class BulletReclaimerScene extends Phaser.Scene {
     this.stageIndex = Phaser.Math.Clamp(data.stageIndex ?? 0, 0, STAGES.length - 1);
     this.enemies = [];
     this.enemyProjectiles = [];
+    this.temporaryCovers = [];
     this.obstacles = [];
     this.bullet = undefined;
     this.titleLayer = undefined;
@@ -88,6 +107,11 @@ export class BulletReclaimerScene extends Phaser.Scene {
     this.combatTimeScale = 1;
     this.aimStartedAt = 0;
     this.nearMissCooldownAt = 0;
+    this.bossPattern = "none";
+    this.bossPatternUntil = 0;
+    this.bossPatternNextAt = 0;
+    this.bossPatternIndex = 0;
+    this.bossPatternTarget.set(0, 0);
     this.playerVelocity.set(0, 0);
   }
 
@@ -156,6 +180,7 @@ export class BulletReclaimerScene extends Phaser.Scene {
       letterSpacing: 1.4,
     }).setOrigin(0.5).setDepth(DEPTH.guide + 1).setVisible(false);
     this.recoveryGuide = this.add.graphics().setDepth(DEPTH.guide);
+    this.bossTelegraph = this.add.graphics().setDepth(DEPTH.guide + 1);
     this.dangerVignette = this.add.graphics().setDepth(DEPTH.actor + 1);
     this.dangerVignette
       .fillStyle(0x8b102b, 0.7)
@@ -198,6 +223,7 @@ export class BulletReclaimerScene extends Phaser.Scene {
     });
 
     this.createStage(stage);
+    if (this.stageIndex === STAGES.length - 1) this.beginBossEntrance();
     if (this.state === "title") this.showTitleScreen();
     this.updateHud();
   }
@@ -245,6 +271,7 @@ export class BulletReclaimerScene extends Phaser.Scene {
     if (canEnemiesMove(this.state)) {
       this.moveEnemies(dt);
       this.moveEnemyProjectiles(dt);
+      this.updateTemporaryCovers();
       this.checkEnemyNearMisses();
       this.checkEnemyContact();
     } else if (this.state === "bullet") {
@@ -529,6 +556,16 @@ export class BulletReclaimerScene extends Phaser.Scene {
       color: "#ffdf72",
     }).setOrigin(1, 0).setDepth(DEPTH.hud);
 
+    this.bossPatternText = this.add.text(GAME_WIDTH / 2, 643, "", {
+      fontFamily: '"Segoe UI", sans-serif',
+      fontSize: "13px",
+      fontStyle: "bold",
+      color: "#ffb4aa",
+      backgroundColor: "#241018",
+      padding: { x: 12, y: 6 },
+      letterSpacing: 1.2,
+    }).setOrigin(0.5).setDepth(DEPTH.hud + 1).setVisible(false);
+
     this.add.text(GAME_WIDTH / 2, 40, "WASD 이동  ·  마우스 누름: 시간 정지 조준  ·  놓기: 발사  ·  우클릭/ESC: 취소  ·  R: 재시작", {
       fontFamily: '"Segoe UI", sans-serif',
       fontSize: "12px",
@@ -601,6 +638,7 @@ export class BulletReclaimerScene extends Phaser.Scene {
       health,
       maxHealth: health,
       alive: true,
+      invulnerable: false,
       path: [],
       pathIndex: 0,
       nextPathAt: 0,
@@ -657,9 +695,9 @@ export class BulletReclaimerScene extends Phaser.Scene {
     for (const enemy of this.enemies) {
       if (!enemy.alive) continue;
       this.updateEnemyThreatVisual(enemy, unarmed);
-      if (enemy.kind === "boss") this.updateBossBarrage(enemy);
+      if (enemy.kind === "boss" && this.updateBossEncounter(enemy, dt, pressureMultiplier)) continue;
       if (enemy.kind === "shooter") this.updateShooterAttack(enemy);
-      if (this.updateEnemyDash(enemy, dt, pressureMultiplier, unarmed)) continue;
+      if (enemy.kind !== "boss" && this.updateEnemyDash(enemy, dt, pressureMultiplier, unarmed)) continue;
 
       const navigationTarget = enemy.kind === "shooter"
         ? this.getShooterNavigationTarget(enemy)
@@ -763,22 +801,267 @@ export class BulletReclaimerScene extends Phaser.Scene {
     this.cameras.main.flash(45, 70, 210, 225, false);
   }
 
-  private updateBossBarrage(enemy: Enemy): void {
-    if (this.time.now < enemy.shootReadyAt || enemy.dashState !== "chase") return;
+  private beginBossEntrance(): void {
+    const boss = this.enemies.find((enemy) => enemy.kind === "boss");
+    if (!boss) return;
+    boss.invulnerable = true;
+    boss.body.setPosition(ARENA.centerX, ARENA.top - 84).setAlpha(0).setScale(2.1);
+    boss.halo.setPosition(ARENA.centerX, ARENA.top - 57).setAlpha(0);
+    boss.eyeGlow.setPosition(ARENA.centerX, ARENA.top - 101).setAlpha(0);
+    this.showBossPattern("CORE DESCENT // 중앙 코어가 강하한다", "#e3a7ff");
+    this.cameras.main.flash(180, 115, 58, 180, false);
+    this.tweens.add({
+      targets: [boss.body, boss.halo, boss.eyeGlow],
+      alpha: 1,
+      duration: 220,
+    });
+    this.tweens.add({
+      targets: boss.body,
+      y: ARENA.centerY - 24,
+      scale: 2.65,
+      duration: 920,
+      ease: "Cubic.Out",
+      onComplete: () => {
+        boss.invulnerable = false;
+        this.syncEnemyVisual(boss);
+        this.burst(boss.body.x, boss.body.y, 0xd9a3ff, 26);
+        this.cameras.main.shake(250, 0.01);
+        this.bossPatternNextAt = this.time.now + 560;
+        this.hideBossPattern();
+      },
+    });
+    this.tweens.add({
+      targets: boss.halo,
+      y: ARENA.centerY + 3,
+      duration: 920,
+      ease: "Cubic.Out",
+    });
+    this.tweens.add({
+      targets: boss.eyeGlow,
+      y: ARENA.centerY - 41,
+      duration: 920,
+      ease: "Cubic.Out",
+    });
+  }
+
+  private updateBossEncounter(enemy: Enemy, dt: number, pressureMultiplier: number): boolean {
+    if (enemy.invulnerable) {
+      this.syncEnemyVisual(enemy);
+      return true;
+    }
+
+    const now = this.time.now;
+    if (this.bossPattern === "none" && now >= this.bossPatternNextAt) this.startBossPattern(enemy);
+
+    if (this.bossPattern === "telegraph-charge" || this.bossPattern === "telegraph-volley" || this.bossPattern === "telegraph-leap") {
+      if (now < this.bossPatternUntil) return true;
+      if (this.bossPattern === "telegraph-charge") {
+        this.bossPattern = "charging";
+        this.bossPatternUntil = now + 900;
+        this.showBossPattern("CHARGE ACTIVE // 측면으로 이탈", "#ff8b7e");
+        return true;
+      }
+      if (this.bossPattern === "telegraph-volley") {
+        this.fireBossVolley(enemy);
+        this.finishBossPattern(620);
+        return true;
+      }
+      this.bossPattern = "leaping";
+      this.bossPatternUntil = now + 360;
+      enemy.body.setAlpha(0.3).setScale(3.1);
+      enemy.halo.setAlpha(0.2);
+      enemy.eyeGlow.setAlpha(0.25);
+      this.showBossPattern("JUMP ACTIVE // 착지 지점에서 이탈", "#ffd17d");
+      return true;
+    }
+
+    if (this.bossPattern === "charging") {
+      const speed = enemy.speed * pressureMultiplier * 5.4;
+      const nextX = enemy.body.x + this.bossPatternTarget.x * speed * dt;
+      const nextY = enemy.body.y + this.bossPatternTarget.y * speed * dt;
+      const brokeCover = this.breakTemporaryCoversAt(nextX, nextY, enemy.radius + 8);
+      const beforeX = enemy.body.x;
+      const beforeY = enemy.body.y;
+      this.tryMoveCircle(enemy.body, this.bossPatternTarget.x * speed * dt, this.bossPatternTarget.y * speed * dt, enemy.radius);
+      this.syncEnemyVisual(enemy);
+      if (brokeCover) this.burst(enemy.body.x, enemy.body.y, 0xffa27e, 15);
+      if (now >= this.bossPatternUntil || Phaser.Math.Distance.Between(beforeX, beforeY, enemy.body.x, enemy.body.y) < speed * dt * 0.28) {
+        this.cameras.main.shake(160, 0.006);
+        this.finishBossPattern(420);
+      }
+      return true;
+    }
+
+    if (this.bossPattern === "leaping") {
+      if (now < this.bossPatternUntil) return true;
+      const landing = this.findSafeBossLanding(this.bossPatternTarget.x, this.bossPatternTarget.y, enemy.radius);
+      enemy.body.setPosition(landing.x, landing.y).setAlpha(1).setScale(2.65);
+      enemy.halo.setAlpha(1);
+      enemy.eyeGlow.setAlpha(1);
+      this.syncEnemyVisual(enemy);
+      this.burst(landing.x, landing.y, 0xffd37f, 30);
+      this.cameras.main.flash(120, 255, 178, 98, false);
+      this.cameras.main.shake(260, 0.012);
+      this.finishBossPattern(430);
+      return true;
+    }
+    return false;
+  }
+
+  private startBossPattern(enemy: Enemy): void {
     const phase = enemy.maxHealth - enemy.health + 1;
+    const patterns: BossPattern[] = phase >= 3
+      ? ["telegraph-charge", "telegraph-leap", "telegraph-volley", "telegraph-charge"]
+      : ["telegraph-charge", "telegraph-volley", "telegraph-leap"];
+    this.bossPattern = patterns[this.bossPatternIndex++ % patterns.length];
     const direction = new Phaser.Math.Vector2(this.player.x - enemy.body.x, this.player.y - enemy.body.y);
-    if (direction.lengthSq() < 1) return;
+    if (direction.lengthSq() < 1) direction.set(1, 0);
     direction.normalize();
-    const count = phase >= 4 ? 5 : phase >= 3 ? 4 : 3;
-    const spread = phase >= 4 ? 0.72 : 0.46;
+    this.bossPatternTarget.set(direction.x, direction.y);
+
+    if (this.bossPattern === "telegraph-charge") {
+      this.bossPatternUntil = this.time.now + Math.max(500, 880 - phase * 60);
+      const targetX = Phaser.Math.Clamp(enemy.body.x + direction.x * 860, ARENA.left + 28, ARENA.right - 28);
+      const targetY = Phaser.Math.Clamp(enemy.body.y + direction.y * 860, ARENA.top + 28, ARENA.bottom - 28);
+      this.bossTelegraph.clear().lineStyle(5, 0xff665f, 0.76).lineBetween(enemy.body.x, enemy.body.y, targetX, targetY);
+      this.bossTelegraph.lineStyle(1.5, 0xffd2bc, 0.9).strokeCircle(targetX, targetY, 24);
+      this.showBossPattern("CHARGE INCOMING // 낙하 엄폐물 뒤로", "#ff8b7e");
+      this.sounds.dashWarning();
+      return;
+    }
+
+    if (this.bossPattern === "telegraph-volley") {
+      this.bossPatternUntil = this.time.now + Math.max(460, 760 - phase * 45);
+      this.bossTelegraph.clear().lineStyle(2, 0xd9a3ff, 0.8).strokeCircle(enemy.body.x, enemy.body.y, 58);
+      this.showBossPattern("CORE VOLLEY // 빈 공간으로 회피", "#d9a3ff");
+      this.sounds.dashWarning();
+      return;
+    }
+
+    this.bossPatternUntil = this.time.now + Math.max(620, 980 - phase * 50);
+    const landing = this.findSafeBossLanding(this.player.x + this.playerVelocity.x * 0.4, this.player.y + this.playerVelocity.y * 0.4, enemy.radius);
+    this.bossPatternTarget.set(landing.x, landing.y);
+    this.bossTelegraph.clear().lineStyle(3, 0xffd37f, 0.86).strokeCircle(landing.x, landing.y, 46);
+    this.bossTelegraph.lineStyle(1.5, 0xfff1ba, 0.9).strokeCircle(landing.x, landing.y, 18);
+    this.spawnFallingCovers();
+    this.showBossPattern("JUMP INCOMING // 낙하 엄폐물 활용", "#ffd17d");
+    this.sounds.dashWarning();
+  }
+
+  private fireBossVolley(enemy: Enemy): void {
+    const phase = enemy.maxHealth - enemy.health + 1;
+    const direction = new Phaser.Math.Vector2(this.player.x - enemy.body.x, this.player.y - enemy.body.y).normalize();
+    const count = phase >= 3 ? 6 : 5;
+    const spread = phase >= 3 ? 0.9 : 0.68;
     for (let index = 0; index < count; index += 1) {
       const offset = Phaser.Math.Linear(-spread / 2, spread / 2, index / (count - 1));
       const angle = Math.atan2(direction.y, direction.x) + offset;
-      this.spawnEnemyProjectile(enemy.body.x, enemy.body.y - 9, Math.cos(angle), Math.sin(angle), 260 + phase * 18, 0xd9a3ff);
+      this.spawnEnemyProjectile(enemy.body.x, enemy.body.y - 9, Math.cos(angle), Math.sin(angle), 286 + phase * 18, 0xd9a3ff);
     }
-    enemy.shootReadyAt = this.time.now + Math.max(900, 1850 - phase * 190);
-    this.burst(enemy.body.x, enemy.body.y, 0xc77dff, 9);
-    this.sounds.dashWarning();
+    this.burst(enemy.body.x, enemy.body.y, 0xc77dff, 16);
+    this.cameras.main.flash(70, 178, 93, 225, false);
+  }
+
+  private finishBossPattern(delay: number): void {
+    this.bossPattern = "none";
+    this.bossPatternNextAt = this.time.now + delay;
+    this.bossTelegraph.clear();
+    this.hideBossPattern();
+  }
+
+  private showBossPattern(message: string, color: string): void {
+    this.bossPatternText.setText(`BOSS SIGNAL // ${message}`).setColor(color).setVisible(true);
+  }
+
+  private hideBossPattern(): void {
+    this.bossPatternText.setVisible(false);
+  }
+
+  private spawnFallingCovers(): void {
+    const candidates = [
+      { x: ARENA.centerX - 210, y: ARENA.centerY + 102 },
+      { x: ARENA.centerX + 24, y: ARENA.centerY - 116 },
+      { x: ARENA.centerX + 226, y: ARENA.centerY + 122 },
+    ];
+    for (const candidate of candidates) {
+      const width = 76;
+      const height = 38;
+      const rect = new Phaser.Geom.Rectangle(candidate.x - width / 2, candidate.y - height / 2, width, height);
+      if (this.obstacles.some((obstacle) => Phaser.Geom.Intersects.RectangleToRectangle(obstacle, rect))) continue;
+      const visual = this.add.graphics().setDepth(DEPTH.obstacle + 2).setPosition(candidate.x, ARENA.top - 44);
+      visual.fillStyle(0x06111d, 0.9).fillRect(-width / 2 + 4, -height / 2 + 5, width, height);
+      visual.fillStyle(0x284d68).fillRect(-width / 2, -height / 2, width, height);
+      visual.fillStyle(0x447c93).fillRect(-width / 2 + 4, -height / 2 + 4, width - 8, height - 8);
+      visual.lineStyle(2, 0x9aeadf, 0.9).strokeRect(-width / 2, -height / 2, width, height);
+      visual.fillStyle(0xd4a660, 0.9).fillRect(-width / 2 + 10, height / 2 - 9, width - 20, 3);
+      this.temporaryCovers.push({
+        rect,
+        visual,
+        landingAt: this.time.now + 460,
+        expiresAt: this.time.now + 5900,
+        active: false,
+      });
+      this.tweens.add({
+        targets: visual,
+        y: candidate.y,
+        duration: 460,
+        ease: "Cubic.In",
+        onComplete: () => this.cameras.main.shake(60, 0.002),
+      });
+    }
+  }
+
+  private updateTemporaryCovers(): void {
+    for (let index = this.temporaryCovers.length - 1; index >= 0; index -= 1) {
+      const cover = this.temporaryCovers[index];
+      if (!cover.active && this.time.now >= cover.landingAt) {
+        cover.active = true;
+        this.obstacles.push(cover.rect);
+      }
+      if (this.time.now < cover.expiresAt) continue;
+      this.destroyTemporaryCover(index, false);
+    }
+  }
+
+  private breakTemporaryCoversAt(x: number, y: number, radius: number): boolean {
+    let broken = false;
+    for (let index = this.temporaryCovers.length - 1; index >= 0; index -= 1) {
+      const cover = this.temporaryCovers[index];
+      if (!cover.active || !this.circleHitsRectangle(x, y, radius, cover.rect)) continue;
+      this.destroyTemporaryCover(index, true);
+      broken = true;
+    }
+    return broken;
+  }
+
+  private destroyTemporaryCover(index: number, shattered: boolean): void {
+    const cover = this.temporaryCovers[index];
+    if (cover.active) {
+      const obstacleIndex = this.obstacles.indexOf(cover.rect);
+      if (obstacleIndex >= 0) this.obstacles.splice(obstacleIndex, 1);
+    }
+    if (shattered) this.burst(cover.rect.centerX, cover.rect.centerY, 0xffbd88, 18);
+    cover.visual.destroy();
+    this.temporaryCovers.splice(index, 1);
+  }
+
+  private findSafeBossLanding(x: number, y: number, radius: number): { x: number; y: number } {
+    const target = {
+      x: Phaser.Math.Clamp(x, ARENA.left + radius, ARENA.right - radius),
+      y: Phaser.Math.Clamp(y, ARENA.top + radius, ARENA.bottom - radius),
+    };
+    if (!this.circleHitsObstacle(target.x, target.y, radius)) return target;
+    for (let distance = 24; distance <= 180; distance += 24) {
+      for (let index = 0; index < 12; index += 1) {
+        const angle = index / 12 * Math.PI * 2;
+        const candidate = {
+          x: Phaser.Math.Clamp(target.x + Math.cos(angle) * distance, ARENA.left + radius, ARENA.right - radius),
+          y: Phaser.Math.Clamp(target.y + Math.sin(angle) * distance, ARENA.top + radius, ARENA.bottom - radius),
+        };
+        if (!this.circleHitsObstacle(candidate.x, candidate.y, radius)) return candidate;
+      }
+    }
+    return { x: ARENA.centerX, y: ARENA.centerY };
   }
 
   private spawnEnemyProjectile(x: number, y: number, dx: number, dy: number, speed: number, tint: number): void {
@@ -973,11 +1256,13 @@ export class BulletReclaimerScene extends Phaser.Scene {
   }
 
   private circleHitsObstacle(x: number, y: number, radius: number): boolean {
-    return this.obstacles.some((rect) => {
-      const closestX = Phaser.Math.Clamp(x, rect.left, rect.right);
-      const closestY = Phaser.Math.Clamp(y, rect.top, rect.bottom);
-      return Phaser.Math.Distance.Between(x, y, closestX, closestY) < radius;
-    });
+    return this.obstacles.some((rect) => this.circleHitsRectangle(x, y, radius, rect));
+  }
+
+  private circleHitsRectangle(x: number, y: number, radius: number, rect: Phaser.Geom.Rectangle): boolean {
+    const closestX = Phaser.Math.Clamp(x, rect.left, rect.right);
+    const closestY = Phaser.Math.Clamp(y, rect.top, rect.bottom);
+    return Phaser.Math.Distance.Between(x, y, closestX, closestY) < radius;
   }
 
   private fire(targetX: number, targetY: number): void {
@@ -1094,6 +1379,10 @@ export class BulletReclaimerScene extends Phaser.Scene {
 
   private damageEnemy(enemy: Enemy): "destroyed" | "blocked" {
     if (!enemy.alive) return "destroyed";
+    if (enemy.invulnerable) {
+      this.showFloatingText(enemy.body.x, enemy.body.y - enemy.radius - 18, "CORE LOCKED", "#d9a3ff");
+      return "blocked";
+    }
     enemy.health -= 1;
     if (enemy.health > 0) {
       this.burst(enemy.body.x, enemy.body.y, 0xd9a3ff, 16);
@@ -1149,11 +1438,14 @@ export class BulletReclaimerScene extends Phaser.Scene {
     enemy.canDash = true;
     enemy.dashReadyAt = this.time.now + 260;
     enemy.shootReadyAt = this.time.now + 380;
+    this.bossPattern = "none";
+    this.bossPatternNextAt = this.time.now + 200;
+    this.bossTelegraph.clear();
+    this.hideBossPattern();
     this.cameras.main.flash(180, 105, 30, 145, false);
     this.cameras.main.shake(260, 0.011);
     this.sounds.phase();
     this.showFloatingText(enemy.body.x, enemy.body.y - 82, `CORE PHASE ${phase}`, "#e3a7ff");
-    this.updateBossBarrage(enemy);
 
     const reinforcementAuthored: EnemyDefinition[] = enemy.health === 3
       ? [{ x: 1160, y: 260, speed: 58, kind: "shooter" }]

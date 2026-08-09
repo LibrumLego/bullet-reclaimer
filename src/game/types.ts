@@ -37,6 +37,7 @@ export interface Enemy {
   health: number;
   maxHealth: number;
   alive: boolean;
+  invulnerable: boolean;
   path: NavigationPoint[];
   pathIndex: number;
   nextPathAt: number;
