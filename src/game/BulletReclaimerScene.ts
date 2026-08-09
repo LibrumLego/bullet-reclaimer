@@ -14,7 +14,9 @@ import {
   PLAYER_SPEED,
   RECOVERY_GRACE_MS,
 } from "./constants";
-import heroRunSheetUrl from "../assets/hero-run-sheet-alpha.png";
+import heroActionV2Url from "../assets/hero-action-v2.png";
+import chaserV2Url from "../assets/chaser-v2.png";
+import enemyCastV2Url from "../assets/enemy-cast-v2.png";
 import { nearestCombinedRayHit, rayRectangleHit, segmentCircleHit } from "./geometry";
 import { findNavigationPath, hasClearPath } from "./pathfinding";
 import { calculateRiskReward, enemyPressureMultiplier } from "./risk";
@@ -128,7 +130,9 @@ export class BulletReclaimerScene extends Phaser.Scene {
   }
 
   preload(): void {
-    this.load.spritesheet("hero-art", heroRunSheetUrl, { frameWidth: 511, frameHeight: 770 });
+    this.load.spritesheet("hero-v2", heroActionV2Url, { frameWidth: 443, frameHeight: 887 });
+    this.load.spritesheet("chaser-v2", chaserV2Url, { frameWidth: 443, frameHeight: 887 });
+    this.load.spritesheet("enemy-cast-v2", enemyCastV2Url, { frameWidth: 495, frameHeight: 793 });
   }
 
   private compactPoint(point: { x: number; y: number }): { x: number; y: number } {
@@ -179,10 +183,10 @@ export class BulletReclaimerScene extends Phaser.Scene {
     ).setDepth(DEPTH.obstacle - 1).setAlpha(0);
     this.createHud(stage);
 
-    this.playerRing = this.add.ellipse(stage.player.x, stage.player.y + 14, 44, 14, 0x02050c, 0.68).setDepth(DEPTH.actor - 1);
-    this.player = this.add.sprite(stage.player.x, stage.player.y, "hero-art", 0)
-      .setScale(0.18)
-      .setOrigin(0.5, 0.78)
+    this.playerRing = this.add.ellipse(stage.player.x, stage.player.y + 5, 36, 8, 0x02050c, 0.7).setDepth(DEPTH.actor - 1);
+    this.player = this.add.sprite(stage.player.x, stage.player.y, "hero-v2", 0)
+      .setScale(0.145)
+      .setOrigin(0.5, 0.775)
       .setDepth(DEPTH.actor);
     this.overlay = this.add.graphics().setDepth(DEPTH.freeze);
     this.aimGuide = this.add.graphics().setDepth(DEPTH.guide);
@@ -282,7 +286,7 @@ export class BulletReclaimerScene extends Phaser.Scene {
       this.movePlayer(dt);
     } else if (this.state === "bullet") {
       this.playerVelocity.set(0, 0);
-      this.player.setTexture("hero-art", 0).setScale(0.18);
+      this.player.setTexture("hero-v2", 3).setScale(0.145);
     }
 
     this.enemyAimGuide.clear();
@@ -321,7 +325,7 @@ export class BulletReclaimerScene extends Phaser.Scene {
       const eyePulse = 1 + Math.sin(this.time.now * 0.011 + enemy.body.y) * 0.12;
       enemy.eyeGlow.setScale(eyePulse, 1);
     }
-    this.playerRing.setPosition(this.player.x, this.player.y + 18);
+    this.playerRing.setPosition(this.player.x, this.player.y + 5);
   }
 
   private createPixelTextures(): void {
@@ -551,7 +555,7 @@ export class BulletReclaimerScene extends Phaser.Scene {
   private showTitleScreen(): void {
     this.overlay.clear().fillStyle(0x040812, 0.88).fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
 
-    const operative = this.add.sprite(425, 382, "hero-art", 0).setScale(0.56).setOrigin(0.5, 0.78);
+    const operative = this.add.sprite(425, 390, "hero-v2", 0).setScale(0.43).setOrigin(0.5, 0.775);
     const operativeGlow = this.add.ellipse(425, 430, 210, 42, 0x5ce0d0, 0.13);
     const kicker = this.add.text(626, 242, "TACTICAL RICOCHET // 01", {
       fontFamily: '"Segoe UI", sans-serif',
@@ -704,21 +708,26 @@ export class BulletReclaimerScene extends Phaser.Scene {
     const isShooter = kind === "shooter";
     const halo = this.add.ellipse(
       definition.x,
-      definition.y + (isBoss ? 27 : 13),
-      isBoss ? 112 : 40,
-      isBoss ? 32 : 13,
+      definition.y + (isBoss ? 10 : 6),
+      isBoss ? 106 : 36,
+      isBoss ? 20 : 9,
       isBoss ? 0x2b1244 : isShooter ? 0x102c43 : 0x240b18,
       0.62,
     ).setDepth(DEPTH.actor - 1);
-    const body = this.add.sprite(definition.x, definition.y, isBoss ? "boss" : isShooter ? "shooter" : "enemy")
-      .setScale(isBoss ? 2.65 : 1.72)
-      .setOrigin(0.5, 0.72)
+    const body = this.add.sprite(
+      definition.x,
+      definition.y,
+      isBoss || isShooter ? "enemy-cast-v2" : "chaser-v2",
+      isBoss ? 2 : 0,
+    )
+      .setScale(isBoss ? 0.22 : isShooter ? 0.115 : 0.13)
+      .setOrigin(0.5, isBoss || isShooter ? 0.86 : 0.7)
       .setDepth(DEPTH.actor);
     const eyeGlow = this.add.rectangle(
       definition.x,
-      definition.y - (isBoss ? 17 : 7),
-      isBoss ? 34 : 17,
-      isBoss ? 6 : 4,
+      definition.y - (isBoss ? 70 : isShooter ? 32 : 30),
+      isBoss ? 38 : 18,
+      isBoss ? 7 : 4,
       isBoss ? 0xe9b7ff : isShooter ? 0x85f7ff : 0xffdf72,
       0.18,
     ).setDepth(DEPTH.actor + 1);
@@ -780,11 +789,11 @@ export class BulletReclaimerScene extends Phaser.Scene {
     if (Math.abs(this.playerVelocity.x) > 8) this.player.setFlipX(this.playerVelocity.x < 0);
 
     const movement = Math.min(1, this.playerVelocity.length() / PLAYER_SPEED);
-    const runFrame = 1 + Math.floor(this.time.now / 88) % 3;
-    this.player.setTexture("hero-art", movement > 0.14 ? runFrame : 0);
+    const runFrame = 1 + Math.floor(this.time.now / 92) % 2;
+    this.player.setTexture("hero-v2", movement > 0.14 ? runFrame : 0);
     const step = Math.sin(this.time.now * 0.043) * 0.055 * movement;
     const breathing = Math.sin(this.time.now * 0.004) * 0.012 * (1 - movement);
-    this.player.setScale(0.18 - Math.abs(step) * 0.04, 0.18 + step * 0.13 + breathing * 0.08);
+    this.player.setScale(0.145 - Math.abs(step) * 0.025, 0.145 + step * 0.055 + breathing * 0.03);
   }
 
   private moveEnemies(dt: number): void {
@@ -921,9 +930,9 @@ export class BulletReclaimerScene extends Phaser.Scene {
     const boss = this.enemies.find((enemy) => enemy.kind === "boss");
     if (!boss) return;
     boss.invulnerable = true;
-    boss.body.setPosition(ARENA.centerX, ARENA.top - 84).setAlpha(0).setScale(2.1);
-    boss.halo.setPosition(ARENA.centerX, ARENA.top - 57).setAlpha(0);
-    boss.eyeGlow.setPosition(ARENA.centerX, ARENA.top - 101).setAlpha(0);
+    boss.body.setPosition(ARENA.centerX, ARENA.top - 84).setAlpha(0).setScale(0.18);
+    boss.halo.setPosition(ARENA.centerX, ARENA.top - 74).setAlpha(0);
+    boss.eyeGlow.setPosition(ARENA.centerX, ARENA.top - 154).setAlpha(0);
     this.showBossPattern("CORE DESCENT // 중앙 코어가 강하한다", "#e3a7ff");
     this.cameras.main.flash(180, 115, 58, 180, false);
     this.tweens.add({
@@ -934,7 +943,7 @@ export class BulletReclaimerScene extends Phaser.Scene {
     this.tweens.add({
       targets: boss.body,
       y: ARENA.centerY - 24,
-      scale: 2.65,
+      scale: 0.22,
       duration: 920,
       ease: "Cubic.Out",
       onComplete: () => {
@@ -948,13 +957,13 @@ export class BulletReclaimerScene extends Phaser.Scene {
     });
     this.tweens.add({
       targets: boss.halo,
-      y: ARENA.centerY + 3,
+      y: ARENA.centerY - 16,
       duration: 920,
       ease: "Cubic.Out",
     });
     this.tweens.add({
       targets: boss.eyeGlow,
-      y: ARENA.centerY - 41,
+      y: ARENA.centerY - 94,
       duration: 920,
       ease: "Cubic.Out",
     });
@@ -986,7 +995,7 @@ export class BulletReclaimerScene extends Phaser.Scene {
       }
       this.bossPattern = "leaping";
       this.bossPatternUntil = now + 360;
-      enemy.body.setAlpha(0.3).setScale(3.1);
+      enemy.body.setAlpha(0.3).setScale(0.255);
       enemy.halo.setAlpha(0.2);
       enemy.eyeGlow.setAlpha(0.25);
       this.showBossPattern("JUMP ACTIVE // 착지 지점에서 이탈", "#ffd17d");
@@ -1013,7 +1022,7 @@ export class BulletReclaimerScene extends Phaser.Scene {
     if (this.bossPattern === "leaping") {
       if (now < this.bossPatternUntil) return true;
       const landing = this.findSafeBossLanding(this.bossPatternTarget.x, this.bossPatternTarget.y, enemy.radius);
-      enemy.body.setPosition(landing.x, landing.y).setAlpha(1).setScale(2.65);
+      enemy.body.setPosition(landing.x, landing.y).setAlpha(1).setScale(0.22);
       enemy.halo.setAlpha(1);
       enemy.eyeGlow.setAlpha(1);
       this.syncEnemyVisual(enemy);
@@ -1295,24 +1304,15 @@ export class BulletReclaimerScene extends Phaser.Scene {
     if (enemy.kind === "chaser") {
       const moving = Math.hypot(enemy.moveVx, enemy.moveVy) > 12 || enemy.dashState === "dashing";
       const runFrame = Math.floor((this.time.now + enemy.body.x * 2) / 82) % 2;
-      enemy.body.setTexture(enemy.dashState === "dashing"
-        ? "enemy-lunge"
-        : moving ? (runFrame === 0 ? "enemy-run-1" : "enemy-run-2") : "enemy");
+      enemy.body.setTexture("chaser-v2", enemy.dashState === "dashing" ? 3 : moving ? 1 + runFrame : 0);
     } else if (enemy.kind === "shooter") {
-      const hoverFrame = Math.floor((this.time.now + enemy.body.x) / 145) % 2;
-      enemy.body.setTexture(hoverFrame === 0 ? "shooter-hover-1" : "shooter-hover-2");
+      enemy.body.setTexture("enemy-cast-v2", enemy.shootTelegraphUntil > 0 ? 1 : 0);
     } else {
-      const strideFrame = Math.floor(this.time.now / 120) % 2;
-      const moving = Math.hypot(enemy.moveVx, enemy.moveVy) > 8;
-      const texture = this.bossPattern === "charging" || this.bossPattern === "telegraph-charge"
-        ? "boss-charge"
-        : this.bossPattern === "leaping" || this.bossPattern === "telegraph-leap"
-          ? "boss-air"
-          : moving ? (strideFrame === 0 ? "boss-step-1" : "boss-step-2") : "boss";
-      enemy.body.setTexture(texture);
+      const attacking = this.bossPattern === "charging" || this.bossPattern === "telegraph-charge";
+      enemy.body.setTexture("enemy-cast-v2", attacking ? 3 : 2);
     }
-    enemy.halo.setPosition(enemy.body.x, enemy.body.y + (enemy.kind === "boss" ? 27 : 13));
-    enemy.eyeGlow.setPosition(enemy.body.x, enemy.body.y - (enemy.kind === "boss" ? 17 : 7));
+    enemy.halo.setPosition(enemy.body.x, enemy.body.y + (enemy.kind === "boss" ? 10 : 6));
+    enemy.eyeGlow.setPosition(enemy.body.x, enemy.body.y - (enemy.kind === "boss" ? 70 : enemy.kind === "shooter" ? 32 : 30));
   }
 
   private restoreEnemyAppearance(enemy: Enemy): void {
@@ -1702,6 +1702,7 @@ export class BulletReclaimerScene extends Phaser.Scene {
     const direction = new Phaser.Math.Vector2(pointer.worldX - this.player.x, pointer.worldY - this.player.y);
     if (direction.lengthSq() === 0) return;
     direction.normalize();
+    this.player.setTexture("hero-v2", 3).setFlipX(direction.x < 0).setScale(0.145);
     const x = this.player.x + direction.x * BULLET_MUZZLE_OFFSET;
     const y = this.player.y + direction.y * BULLET_MUZZLE_OFFSET;
     // Planning shows commitment, not a solved ricochet. Every bounce after this vector is unknown.
