@@ -316,81 +316,97 @@ export class BulletReclaimerScene extends Phaser.Scene {
 
     const drawHero = (pose: 0 | 1 | 2 | 3): void => {
       const running = pose !== 0;
-      const torsoX = pose === 2 ? 8 : pose === 3 ? 9 : 7;
-      const headX = pose === 2 ? 9 : 8;
-      // Original tactical runner: a heavier forward lean, active scarf, and four distinct strides.
-      const scarf = pose === 1 ? [[2, 12, 6, 4], [0, 15, 5, 3]]
-        : pose === 2 ? [[1, 13, 7, 4], [0, 17, 4, 3]]
-          : pose === 3 ? [[3, 11, 5, 4], [1, 14, 4, 3]]
-            : [[2, 11, 5, 4], [1, 14, 4, 2]];
-      g.fillStyle(0x8f4e38).fillRect(torsoX - 3, 10, 4, 14);
-      g.fillStyle(0xd8894d);
+      const lean = pose === 2 ? 2 : pose === 3 ? 1 : 0;
+      const scarf = pose === 1 ? [[1, 15, 9, 4], [0, 19, 6, 3], [3, 22, 4, 2]]
+        : pose === 2 ? [[0, 16, 11, 4], [0, 21, 8, 3], [2, 24, 5, 2]]
+          : pose === 3 ? [[3, 14, 7, 4], [1, 18, 6, 3]]
+            : [[3, 14, 6, 4], [1, 18, 4, 2]];
+      // A sharp hood, glowing visor and asymmetric reclaim blade create the hero silhouette.
+      g.fillStyle(0x4d2030).fillRect(9 + lean, 11, 5, 18);
+      g.fillStyle(0xe57b4f);
       for (const [x, y, w, h] of scarf) g.fillRect(x, y, w, h);
-      g.fillStyle(0x0a1020).fillRect(torsoX, 10, 12, 14);
-      g.fillStyle(0x263c59).fillRect(torsoX + 1, 11, 10, 11);
-      g.fillStyle(0x3e7188).fillRect(torsoX + 2, 13, 8, 7);
-      g.fillStyle(0xdde4df).fillRect(headX, 3, 9, 7);
-      g.fillStyle(0xf6eee0).fillRect(headX + 2, 4, 8, 5);
-      g.fillStyle(0xc8d1cd).fillRect(headX - 1, 2, 4, 5).fillRect(headX + 6, 1, 4, 3);
-      g.fillStyle(0x1c2638).fillRect(headX + 1, 8, 9, 3);
-      g.fillStyle(0x75e2df).fillRect(headX + 7, 7, 2, 2);
-      const gauntletX = pose === 1 ? 19 : pose === 2 ? 20 : pose === 3 ? 17 : 18;
-      const gauntletY = pose === 1 ? 11 : pose === 2 ? 13 : pose === 3 ? 10 : 12;
-      g.fillStyle(0x0b1322).fillRect(gauntletX - 1, gauntletY, 6, 8);
-      g.fillStyle(0x32647a).fillRect(gauntletX, gauntletY + 1, 5, 6);
-      g.fillStyle(0x92f2e7).fillRect(gauntletX + 3, gauntletY + 2, 3, 3);
-      g.fillStyle(0xf3c86a).fillRect(gauntletX + 5, gauntletY + 3, 2, 1);
-      g.fillStyle(0x0a1020);
+      g.fillStyle(0x070d19).fillRect(11 + lean, 10, 13, 17);
+      g.fillStyle(0x17314c).fillRect(12 + lean, 11, 11, 14);
+      g.fillStyle(0x275979).fillRect(14 + lean, 14, 8, 9);
+      g.fillStyle(0x07101e).fillRect(13 + lean, 3, 11, 9);
+      g.fillStyle(0x325875).fillRect(14 + lean, 2, 8, 4).fillRect(11 + lean, 5, 3, 5);
+      g.fillStyle(0xdbe9e7).fillRect(16 + lean, 5, 7, 5);
+      g.fillStyle(0x87faf1).fillRect(18 + lean, 6, 5, 2);
+      g.fillStyle(0x0d1b2c).fillRect(15 + lean, 10, 10, 3);
+      g.fillStyle(0x7cecdf).fillRect(22 + lean, 8, 2, 2);
+      const bladeX = pose === 1 ? 25 : pose === 2 ? 27 : pose === 3 ? 23 : 24;
+      const bladeY = pose === 1 ? 11 : pose === 2 ? 14 : pose === 3 ? 9 : 12;
+      g.fillStyle(0x07101c).fillRect(bladeX - 2, bladeY, 7, 9);
+      g.fillStyle(0x35667c).fillRect(bladeX - 1, bladeY + 1, 6, 7);
+      g.fillStyle(0x9cfaf0).fillRect(bladeX + 3, bladeY + 2, 4, 3);
+      g.fillStyle(0xffd271).fillRect(bladeX + 6, bladeY + 3, 2, 1);
+      g.fillStyle(0x08101d);
       if (pose === 1) {
-        g.fillRect(6, 21, 5, 7).fillRect(16, 23, 5, 5);
-        g.fillStyle(0x506c7c).fillRect(4, 26, 7, 3).fillRect(16, 26, 7, 2);
+        g.fillRect(9, 25, 5, 9).fillRect(21, 28, 6, 6);
+        g.fillStyle(0x47788c).fillRect(6, 31, 8, 4).fillRect(21, 31, 8, 3);
       } else if (pose === 2) {
-        g.fillRect(7, 22, 5, 6).fillRect(17, 19, 5, 8);
-        g.fillStyle(0x506c7c).fillRect(5, 26, 7, 3).fillRect(18, 24, 7, 3);
+        g.fillRect(12, 26, 5, 8).fillRect(23, 22, 6, 11);
+        g.fillStyle(0x47788c).fillRect(8, 31, 9, 4).fillRect(24, 29, 8, 4);
       } else if (pose === 3) {
-        g.fillRect(5, 23, 5, 5).fillRect(15, 21, 5, 7);
-        g.fillStyle(0x506c7c).fillRect(3, 26, 7, 3).fillRect(15, 26, 7, 3);
+        g.fillRect(8, 28, 6, 6).fillRect(20, 24, 5, 10);
+        g.fillStyle(0x47788c).fillRect(5, 31, 9, 4).fillRect(20, 31, 8, 3);
       } else {
-        g.fillRect(8, 22, 4, 6).fillRect(15, 22, 4, 6);
-        g.fillStyle(0x506c7c).fillRect(7, 26, 5, 2).fillRect(15, 26, 5, 2);
+        g.fillRect(12, 26, 5, 8).fillRect(20, 26, 5, 8);
+        g.fillStyle(0x47788c).fillRect(10, 31, 7, 3).fillRect(20, 31, 7, 3);
       }
-      if (running) g.fillStyle(0x8bf5f1, 0.55).fillRect(torsoX - 1, 24, 2, 2);
+      if (running) g.fillStyle(0x8bf5f1, 0.65).fillRect(11 + lean, 27, 3, 2);
     };
-    makeTexture("hero", 28, 30, () => drawHero(0));
-    makeTexture("hero-run-1", 28, 30, () => drawHero(1));
-    makeTexture("hero-run-2", 28, 30, () => drawHero(2));
-    makeTexture("hero-run-3", 28, 30, () => drawHero(3));
-    makeTexture("hero-step", 28, 30, () => drawHero(1));
+    makeTexture("hero", 34, 36, () => drawHero(0));
+    makeTexture("hero-run-1", 34, 36, () => drawHero(1));
+    makeTexture("hero-run-2", 34, 36, () => drawHero(2));
+    makeTexture("hero-run-3", 34, 36, () => drawHero(3));
+    makeTexture("hero-step", 34, 36, () => drawHero(1));
 
     const drawHunter = (pose: 0 | 1 | 2): void => {
-      g.fillStyle(0x180f20).fillRect(5, 4, 13, 13);
-      g.fillStyle(0x5b203d).fillRect(3, 7, 17, 9);
-      g.fillStyle(0xb74762).fillRect(5, 5, 13, 9);
-      g.fillStyle(0xe56a73).fillRect(7, 4, 9, 3);
-      g.fillStyle(0x25101f).fillRect(6, 8, 11, 4);
-      g.fillStyle(0xffe28a).fillRect(7, 9, 3, 2).fillRect(14, 9, 3, 2);
-      g.fillStyle(0xff786d).fillRect(4, 2, 3, 4).fillRect(16, 1, 3, 5);
-      g.fillStyle(0x371326).fillRect(1, 10, 4, 5).fillRect(18, 10, 4, 5);
+      const lean = pose === 1 ? 1 : pose === 2 ? 2 : 0;
+      g.fillStyle(0x110a18).fillRect(7 + lean, 4, 15, 14);
+      g.fillStyle(0x56203b).fillRect(4 + lean, 8, 20, 10);
+      g.fillStyle(0xb43d58).fillRect(7 + lean, 5, 14, 10);
+      g.fillStyle(0xf06d72).fillRect(9 + lean, 4, 10, 3);
+      g.fillStyle(0x1f0d1d).fillRect(8 + lean, 9, 12, 5);
+      g.fillStyle(0xffdf76).fillRect(9 + lean, 10, 3, 2).fillRect(16 + lean, 10, 3, 2);
+      g.fillStyle(0xff6f6d).fillRect(5 + lean, 1, 3, 6).fillRect(19 + lean, 1, 3, 6);
+      g.fillStyle(0x260e20).fillRect(1 + lean, 11, 6, 6).fillRect(21 + lean, 10, 6, 7);
+      g.fillStyle(0xe85e6d).fillRect(2 + lean, 13, 3, 2).fillRect(23 + lean, 12, 3, 2);
       g.fillStyle(0x210f20);
-      if (pose === 1) g.fillRect(4, 14, 5, 6).fillRect(15, 16, 5, 4);
-      else if (pose === 2) g.fillRect(6, 16, 5, 4).fillRect(15, 13, 5, 7);
-      else g.fillRect(6, 15, 4, 5).fillRect(14, 15, 4, 5);
+      if (pose === 1) {
+        g.fillRect(5, 17, 6, 8).fillRect(19, 20, 7, 5);
+        g.fillStyle(0x703047).fillRect(3, 23, 9, 3).fillRect(20, 23, 9, 3);
+      } else if (pose === 2) {
+        g.fillRect(9, 19, 6, 6).fillRect(21, 16, 6, 9);
+        g.fillStyle(0x703047).fillRect(6, 23, 9, 3).fillRect(22, 22, 8, 4);
+      } else {
+        g.fillRect(9, 18, 5, 7).fillRect(19, 18, 5, 7);
+        g.fillStyle(0x703047).fillRect(7, 23, 8, 3).fillRect(19, 23, 8, 3);
+      }
     };
-    makeTexture("enemy", 22, 20, () => drawHunter(0));
-    makeTexture("enemy-run-1", 22, 20, () => drawHunter(1));
-    makeTexture("enemy-run-2", 22, 20, () => drawHunter(2));
-    makeTexture("enemy-step", 22, 20, () => drawHunter(1));
+    makeTexture("enemy", 30, 27, () => drawHunter(0));
+    makeTexture("enemy-run-1", 30, 27, () => drawHunter(1));
+    makeTexture("enemy-run-2", 30, 27, () => drawHunter(2));
+    makeTexture("enemy-lunge", 30, 27, () => drawHunter(1));
+    makeTexture("enemy-step", 30, 27, () => drawHunter(1));
 
-    makeTexture("shooter", 24, 22, () => {
-      g.fillStyle(0x0d1728).fillRect(4, 5, 16, 14);
-      g.fillStyle(0x244a70).fillRect(2, 7, 20, 10);
-      g.fillStyle(0x3d7897).fillRect(5, 4, 14, 12);
-      g.fillStyle(0x101c31).fillRect(7, 7, 10, 6);
-      g.fillStyle(0x8bf5f1).fillRect(8, 9, 3, 2).fillRect(14, 9, 3, 2);
-      g.fillStyle(0x75b8dd).fillRect(9, 1, 6, 4);
-      g.fillStyle(0x15263c).fillRect(0, 10, 4, 5).fillRect(20, 10, 4, 5);
-      g.fillStyle(0x66d8e6).fillRect(10, 17, 4, 4);
-    });
+    const drawShooter = (pose: 0 | 1 | 2): void => {
+      const lift = pose === 1 ? -2 : pose === 2 ? 1 : 0;
+      g.fillStyle(0x081424).fillRect(5, 6 + lift, 18, 14);
+      g.fillStyle(0x1d4668).fillRect(3, 8 + lift, 22, 10);
+      g.fillStyle(0x3f7ea0).fillRect(7, 4 + lift, 14, 13);
+      g.fillStyle(0x0b1a30).fillRect(9, 8 + lift, 10, 6);
+      g.fillStyle(0x9bfff5).fillRect(10, 10 + lift, 3, 2).fillRect(16, 10 + lift, 3, 2);
+      g.fillStyle(0x70bfe0).fillRect(11, 1 + lift, 6, 4);
+      g.fillStyle(0x102a45).fillRect(0, 11 + lift, 7, 5).fillRect(21, 9 + lift, 7, 7);
+      g.fillStyle(0x76eaf1).fillRect(23, 11 + lift, 6, 3);
+      g.fillStyle(0x58cedb).fillRect(11, 18 + lift, 5, 5).fillRect(17, 18 + lift, 4, 5);
+      if (pose !== 0) g.fillStyle(0x77fff3, 0.6).fillRect(8, 23 + lift, 12, 3);
+    };
+    makeTexture("shooter", 30, 27, () => drawShooter(0));
+    makeTexture("shooter-hover-1", 30, 27, () => drawShooter(1));
+    makeTexture("shooter-hover-2", 30, 27, () => drawShooter(2));
 
     makeTexture("enemy-bolt", 10, 6, () => {
       g.fillStyle(0x15334d).fillRect(0, 1, 3, 4);
@@ -398,23 +414,48 @@ export class BulletReclaimerScene extends Phaser.Scene {
       g.fillStyle(0xe1ffff).fillRect(6, 1, 4, 4);
     });
 
-    makeTexture("boss", 36, 40, () => {
-      g.fillStyle(0x140c24).fillRect(8, 4, 20, 32);
-      g.fillStyle(0x2e1f4e).fillRect(4, 9, 28, 23);
-      g.fillStyle(0x4f3678).fillRect(1, 13, 8, 14).fillRect(27, 13, 8, 14);
-      g.fillStyle(0x26183e).fillRect(0, 17, 5, 8).fillRect(31, 17, 5, 8);
-      g.fillStyle(0x7654a5).fillRect(9, 5, 18, 8);
-      g.fillStyle(0x1a112e).fillRect(11, 8, 14, 8);
-      g.fillStyle(0xf3d7ff).fillRect(12, 10, 4, 2).fillRect(20, 10, 4, 2);
-      g.fillStyle(0xb364ff).fillRect(13, 10, 3, 2).fillRect(20, 10, 3, 2);
-      g.fillStyle(0x201333).fillRect(8, 17, 20, 15);
-      g.fillStyle(0x6c4596).fillRect(11, 18, 14, 12);
-      g.fillStyle(0xd991ff).fillRect(14, 20, 8, 8);
-      g.fillStyle(0xffe4ff).fillRect(16, 21, 4, 5);
-      g.fillStyle(0x39225b).fillRect(7, 32, 8, 6).fillRect(21, 32, 8, 6);
-      g.fillStyle(0xa968df).fillRect(2, 5, 4, 4).fillRect(30, 5, 4, 4).fillRect(16, 0, 4, 4);
-      g.fillStyle(0xf0c8ff).fillRect(3, 6, 2, 2).fillRect(31, 6, 2, 2).fillRect(17, 1, 2, 2);
-    });
+    const drawBoss = (pose: 0 | 1 | 2 | 3 | 4): void => {
+      const lean = pose === 1 ? 2 : pose === 2 ? 4 : pose === 3 ? 5 : 0;
+      const airborne = pose === 4;
+      const coreY = airborne ? 8 : 12;
+      // Large asymmetrical reactor beast: shoulder pylons, a bright core and heavy clawed legs.
+      g.fillStyle(0x12091f).fillRect(13 + lean, coreY, 22, 29);
+      g.fillStyle(0x30204d).fillRect(8 + lean, coreY + 7, 33, 22);
+      g.fillStyle(0x604188).fillRect(13 + lean, coreY + 2, 22, 11);
+      g.fillStyle(0x171029).fillRect(16 + lean, coreY + 7, 17, 9);
+      g.fillStyle(0xf1d8ff).fillRect(18 + lean, coreY + 10, 4, 2).fillRect(28 + lean, coreY + 10, 4, 2);
+      g.fillStyle(0xc779ff).fillRect(19 + lean, coreY + 10, 2, 2).fillRect(29 + lean, coreY + 10, 2, 2);
+      g.fillStyle(0x201333).fillRect(15 + lean, coreY + 18, 21, 15);
+      g.fillStyle(0x7651a5).fillRect(19 + lean, coreY + 19, 13, 11);
+      g.fillStyle(0xe7b9ff).fillRect(22 + lean, coreY + 21, 7, 7);
+      g.fillStyle(0xffffff).fillRect(24 + lean, coreY + 23, 3, 3);
+      g.fillStyle(0x443060).fillRect(3 + lean, coreY + 11, 10, 15).fillRect(35 + lean, coreY + 10, 10, 16);
+      g.fillStyle(0x8d63bd).fillRect(0 + lean, coreY + 15, 7, 8).fillRect(41 + lean, coreY + 14, 7, 9);
+      g.fillStyle(0xe6c3ff).fillRect(1 + lean, coreY + 16, 3, 3).fillRect(44 + lean, coreY + 15, 3, 3);
+      if (pose === 3) {
+        g.fillStyle(0x9e72d8).fillRect(3, coreY + 17, 11, 8).fillRect(36, coreY + 15, 13, 9);
+        g.fillStyle(0xffd1ff).fillRect(0, coreY + 19, 5, 3).fillRect(45, coreY + 17, 5, 3);
+      }
+      g.fillStyle(0x241635);
+      if (pose === 1) {
+        g.fillRect(12, coreY + 31, 10, 10).fillRect(31, coreY + 34, 12, 7);
+        g.fillStyle(0x5b4277).fillRect(7, coreY + 38, 16, 5).fillRect(32, coreY + 38, 15, 4);
+      } else if (pose === 2) {
+        g.fillRect(17, coreY + 34, 11, 7).fillRect(35, coreY + 29, 10, 12);
+        g.fillStyle(0x5b4277).fillRect(12, coreY + 38, 16, 5).fillRect(36, coreY + 37, 14, 5);
+      } else if (airborne) {
+        g.fillStyle(0xb778ee, 0.72).fillRect(14, 37, 22, 4).fillRect(18, 42, 14, 3);
+      } else {
+        g.fillRect(16, coreY + 32, 10, 9).fillRect(32, coreY + 32, 10, 9);
+        g.fillStyle(0x5b4277).fillRect(12, coreY + 38, 15, 4).fillRect(31, coreY + 38, 15, 4);
+      }
+      g.fillStyle(0xa968df).fillRect(8 + lean, coreY + 1, 4, 4).fillRect(38 + lean, coreY + 1, 4, 4).fillRect(23 + lean, coreY - 4, 5, 4);
+    };
+    makeTexture("boss", 56, 50, () => drawBoss(0));
+    makeTexture("boss-step-1", 56, 50, () => drawBoss(1));
+    makeTexture("boss-step-2", 56, 50, () => drawBoss(2));
+    makeTexture("boss-charge", 56, 50, () => drawBoss(3));
+    makeTexture("boss-air", 56, 50, () => drawBoss(4));
 
     makeTexture("bullet", 9, 5, () => {
       g.fillStyle(0x69412c).fillRect(0, 1, 3, 3);
@@ -872,6 +913,8 @@ export class BulletReclaimerScene extends Phaser.Scene {
       return true;
     }
 
+    this.syncEnemyVisual(enemy);
+
     const now = this.time.now;
     if (this.bossPattern === "none" && now >= this.bossPatternNextAt) this.startBossPattern(enemy);
 
@@ -1193,7 +1236,21 @@ export class BulletReclaimerScene extends Phaser.Scene {
     if (enemy.kind === "chaser") {
       const moving = Math.hypot(enemy.moveVx, enemy.moveVy) > 12 || enemy.dashState === "dashing";
       const runFrame = Math.floor((this.time.now + enemy.body.x * 2) / 82) % 2;
-      enemy.body.setTexture(moving ? (runFrame === 0 ? "enemy-run-1" : "enemy-run-2") : "enemy");
+      enemy.body.setTexture(enemy.dashState === "dashing"
+        ? "enemy-lunge"
+        : moving ? (runFrame === 0 ? "enemy-run-1" : "enemy-run-2") : "enemy");
+    } else if (enemy.kind === "shooter") {
+      const hoverFrame = Math.floor((this.time.now + enemy.body.x) / 145) % 2;
+      enemy.body.setTexture(hoverFrame === 0 ? "shooter-hover-1" : "shooter-hover-2");
+    } else {
+      const strideFrame = Math.floor(this.time.now / 120) % 2;
+      const moving = Math.hypot(enemy.moveVx, enemy.moveVy) > 8;
+      const texture = this.bossPattern === "charging" || this.bossPattern === "telegraph-charge"
+        ? "boss-charge"
+        : this.bossPattern === "leaping" || this.bossPattern === "telegraph-leap"
+          ? "boss-air"
+          : moving ? (strideFrame === 0 ? "boss-step-1" : "boss-step-2") : "boss";
+      enemy.body.setTexture(texture);
     }
     enemy.halo.setPosition(enemy.body.x, enemy.body.y + (enemy.kind === "boss" ? 27 : 13));
     enemy.eyeGlow.setPosition(enemy.body.x, enemy.body.y - (enemy.kind === "boss" ? 17 : 7));
