@@ -51,6 +51,7 @@ export interface Enemy {
   dashVy: number;
   moveVx: number;
   moveVy: number;
+  animationDistance: number;
   nearMissReadyAt: number;
   shootReadyAt: number;
   shootTelegraphUntil: number;

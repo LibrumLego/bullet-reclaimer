@@ -15,11 +15,13 @@ import {
   RECOVERY_GRACE_MS,
 } from "./constants";
 import heroActionV2Url from "../assets/hero-action-v2.png";
-import heroRunV4Url from "../assets/hero-run-v4.png";
-import chaserRunV4Url from "../assets/chaser-run-v4.png";
-import shooterRunV3Url from "../assets/shooter-run-v3.png";
-import bossRunV3Url from "../assets/boss-run-v3.png";
+import heroRunV5Url from "../assets/hero-run-v5.png";
+import chaserRunV5Url from "../assets/chaser-run-v5.png";
+import shooterRunV4Url from "../assets/shooter-run-v4.png";
+import bossRunV4Url from "../assets/boss-run-v4.png";
+import arenaFloorV1Url from "../assets/arena-floor-v1.jpg";
 import { nearestCombinedRayHit, rayRectangleHit, segmentCircleHit } from "./geometry";
+import { createRandomSeed, generateSeededStage } from "./mapGenerator";
 import { findNavigationPath, hasClearPath } from "./pathfinding";
 import { calculateRiskReward, enemyPressureMultiplier } from "./risk";
 import { SoundManager } from "./SoundManager";
@@ -49,6 +51,8 @@ interface TemporaryCover {
 const BULLET_MUZZLE_OFFSET = Math.max(0, PLAYER_RADIUS - BULLET_RADIUS - 2);
 const AUTHORING_ARENA = { x: 54, y: 86, width: 1172, height: 574 };
 const ENEMY_BASE_SPEED_MULTIPLIER = 1.12;
+const RUN_ORIGIN_Y = 476 / 512;
+const HERO_ACTION_ORIGIN_Y = 687 / 887;
 
 export class BulletReclaimerScene extends Phaser.Scene {
   private player!: Phaser.GameObjects.Sprite;
@@ -94,6 +98,8 @@ export class BulletReclaimerScene extends Phaser.Scene {
   private bossPatternUntil = 0;
   private bossPatternNextAt = 0;
   private bossPatternIndex = 0;
+  private mapSeed = "";
+  private playerStrideDistance = 0;
   private readonly bossPatternTarget = new Phaser.Math.Vector2();
   private readonly playerVelocity = new Phaser.Math.Vector2();
   private readonly sounds = new SoundManager();
@@ -105,7 +111,7 @@ export class BulletReclaimerScene extends Phaser.Scene {
     super("bullet-reclaimer");
   }
 
-  init(data: { stageIndex?: number; showTitle?: boolean; score?: number } = {}): void {
+  init(data: { stageIndex?: number; showTitle?: boolean; score?: number; mapSeed?: string } = {}): void {
     this.stageIndex = Phaser.Math.Clamp(data.stageIndex ?? 0, 0, STAGES.length - 1);
     this.enemies = [];
     this.enemyProjectiles = [];
@@ -127,16 +133,19 @@ export class BulletReclaimerScene extends Phaser.Scene {
     this.bossPatternUntil = 0;
     this.bossPatternNextAt = 0;
     this.bossPatternIndex = 0;
+    this.mapSeed = data.mapSeed ?? createRandomSeed();
+    this.playerStrideDistance = 0;
     this.bossPatternTarget.set(0, 0);
     this.playerVelocity.set(0, 0);
   }
 
   preload(): void {
     this.load.spritesheet("hero-v2", heroActionV2Url, { frameWidth: 443, frameHeight: 887 });
-    this.load.spritesheet("hero-run-v4", heroRunV4Url, { frameWidth: 512, frameHeight: 512 });
-    this.load.spritesheet("chaser-run-v4", chaserRunV4Url, { frameWidth: 512, frameHeight: 512 });
-    this.load.spritesheet("shooter-run-v3", shooterRunV3Url, { frameWidth: 512, frameHeight: 512 });
-    this.load.spritesheet("boss-run-v3", bossRunV3Url, { frameWidth: 512, frameHeight: 512 });
+    this.load.spritesheet("hero-run-v5", heroRunV5Url, { frameWidth: 512, frameHeight: 512 });
+    this.load.spritesheet("chaser-run-v5", chaserRunV5Url, { frameWidth: 512, frameHeight: 512 });
+    this.load.spritesheet("shooter-run-v4", shooterRunV4Url, { frameWidth: 512, frameHeight: 512 });
+    this.load.spritesheet("boss-run-v4", bossRunV4Url, { frameWidth: 512, frameHeight: 512 });
+    this.load.image("arena-floor-v1", arenaFloorV1Url);
   }
 
   private compactPoint(point: { x: number; y: number }): { x: number; y: number } {
@@ -168,7 +177,10 @@ export class BulletReclaimerScene extends Phaser.Scene {
   }
 
   create(): void {
-    const stage = this.compactStage(STAGES[this.stageIndex]);
+    const authoredStage = this.compactStage(STAGES[this.stageIndex]);
+    const stage = this.stageIndex === STAGES.length - 1
+      ? authoredStage
+      : generateSeededStage(authoredStage, ARENA, this.mapSeed);
     this.time.timeScale = 1;
     this.cameras.main.setBackgroundColor("#080b12");
     this.game.canvas.tabIndex = 0;
@@ -187,10 +199,10 @@ export class BulletReclaimerScene extends Phaser.Scene {
     ).setDepth(DEPTH.obstacle - 1).setAlpha(0);
     this.createHud(stage);
 
-    this.playerRing = this.add.ellipse(stage.player.x, stage.player.y + 5, 36, 8, 0x02050c, 0.7).setDepth(DEPTH.actor - 1);
+    this.playerRing = this.add.ellipse(stage.player.x, stage.player.y + 2, 34, 6, 0x01030a, 0.82).setDepth(DEPTH.actor - 1);
     this.player = this.add.sprite(stage.player.x, stage.player.y, "hero-v2", 0)
       .setScale(0.145)
-      .setOrigin(0.5, 0.775)
+      .setOrigin(0.5, HERO_ACTION_ORIGIN_Y)
       .setDepth(DEPTH.actor);
     this.overlay = this.add.graphics().setDepth(DEPTH.freeze);
     this.aimGuide = this.add.graphics().setDepth(DEPTH.guide);
@@ -290,7 +302,7 @@ export class BulletReclaimerScene extends Phaser.Scene {
       this.movePlayer(dt);
     } else if (this.state === "bullet") {
       this.playerVelocity.set(0, 0);
-      this.player.setTexture("hero-v2", 3).setOrigin(0.5, 0.775).setScale(0.145);
+      this.player.setTexture("hero-v2", 3).setOrigin(0.5, HERO_ACTION_ORIGIN_Y).setScale(0.145);
     }
 
     this.enemyAimGuide.clear();
@@ -329,7 +341,7 @@ export class BulletReclaimerScene extends Phaser.Scene {
       const eyePulse = 1 + Math.sin(this.time.now * 0.011 + enemy.body.y) * 0.12;
       enemy.eyeGlow.setScale(eyePulse, 1);
     }
-    this.playerRing.setPosition(this.player.x, this.player.y + 5);
+    this.playerRing.setPosition(this.player.x, this.player.y + 2);
   }
 
   private createPixelTextures(): void {
@@ -522,19 +534,13 @@ export class BulletReclaimerScene extends Phaser.Scene {
   private drawArena(): void {
     const floor = this.add.graphics().setDepth(DEPTH.arena);
     floor.fillStyle(0x070a12).fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
-    floor.fillStyle(0x101827).fillRect(ARENA.x, ARENA.y, ARENA.width, ARENA.height);
-    // Broad panels and tiny service lights read as a designed space instead of a checkerboard.
-    for (let y = ARENA.y; y < ARENA.bottom; y += 64) {
-      for (let x = ARENA.x; x < ARENA.right; x += 64) {
-        const alternate = (Math.floor(x / 64) + Math.floor(y / 64)) % 2 === 0;
-        floor.fillStyle(alternate ? 0x131e2e : 0x111b2a).fillRect(x + 2, y + 2, 60, 60);
-        floor.lineStyle(1, 0x22344a, 0.5).strokeRect(x + 2, y + 2, 60, 60);
-        floor.fillStyle(0x5a7891, 0.32).fillCircle(x + 8, y + 8, 1.5).fillCircle(x + 56, y + 56, 1.5);
-      }
-    }
-    floor.lineStyle(2, 0x1e4d5a, 0.34).lineBetween(ARENA.x + 18, ARENA.centerY, ARENA.right - 18, ARENA.centerY);
-    floor.fillStyle(0x5ce0d0, 0.22);
-    for (let x = ARENA.x + 34; x < ARENA.right; x += 156) floor.fillRect(x, ARENA.centerY - 1, 26, 2);
+    const floorTint = [0x8faab4, 0x9ba6bb, 0x8cabb0, 0xa397aa, 0x88729c][this.stageIndex] ?? 0xffffff;
+    this.add.image(ARENA.centerX, ARENA.centerY, "arena-floor-v1")
+      .setDisplaySize(ARENA.width, ARENA.height)
+      .setTint(floorTint)
+      .setDepth(DEPTH.arena + 0.1);
+    this.add.rectangle(ARENA.centerX, ARENA.centerY, ARENA.width, ARENA.height, 0x06101c, 0.18)
+      .setDepth(DEPTH.arena + 0.2);
 
     const frame = this.add.graphics().setDepth(DEPTH.arena + 1);
     frame.fillStyle(0x03060d).fillRect(ARENA.x - 9, ARENA.y - 9, ARENA.width + 18, 9);
@@ -559,7 +565,7 @@ export class BulletReclaimerScene extends Phaser.Scene {
   private showTitleScreen(): void {
     this.overlay.clear().fillStyle(0x040812, 0.88).fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
 
-    const operative = this.add.sprite(425, 390, "hero-v2", 0).setScale(0.43).setOrigin(0.5, 0.775);
+    const operative = this.add.sprite(425, 390, "hero-v2", 0).setScale(0.43).setOrigin(0.5, HERO_ACTION_ORIGIN_Y);
     const operativeGlow = this.add.ellipse(425, 430, 210, 42, 0x5ce0d0, 0.13);
     const kicker = this.add.text(626, 242, "TACTICAL RICOCHET // 01", {
       fontFamily: '"Segoe UI", sans-serif',
@@ -626,7 +632,8 @@ export class BulletReclaimerScene extends Phaser.Scene {
       letterSpacing: 0.8,
     }).setDepth(DEPTH.hud);
 
-    this.stageText.setText(`STAGE ${this.stageIndex + 1}/${STAGES.length}  //  ${stage.name}`);
+    const seedLabel = this.stageIndex === STAGES.length - 1 ? "FIXED CORE" : `SEED ${this.mapSeed}`;
+    this.stageText.setText(`STAGE ${this.stageIndex + 1}/${STAGES.length}  //  ${stage.name}  //  ${seedLabel}`);
 
     this.objectiveText = this.add.text(54, 678, "", {
       fontFamily: '"Segoe UI", sans-serif',
@@ -712,20 +719,20 @@ export class BulletReclaimerScene extends Phaser.Scene {
     const isShooter = kind === "shooter";
     const halo = this.add.ellipse(
       definition.x,
-      definition.y + (isBoss ? 10 : 6),
-      isBoss ? 106 : 36,
-      isBoss ? 20 : 9,
+      definition.y + (isBoss ? 4 : 2),
+      isBoss ? 102 : 34,
+      isBoss ? 14 : 7,
       isBoss ? 0x2b1244 : isShooter ? 0x102c43 : 0x240b18,
       0.62,
     ).setDepth(DEPTH.actor - 1);
     const body = this.add.sprite(
       definition.x,
       definition.y,
-      isBoss ? "boss-run-v3" : isShooter ? "shooter-run-v3" : "chaser-run-v4",
+      isBoss ? "boss-run-v4" : isShooter ? "shooter-run-v4" : "chaser-run-v5",
       0,
     )
       .setScale(isBoss ? 0.27 : isShooter ? 0.135 : 0.16)
-      .setOrigin(0.5, 0.922)
+      .setOrigin(0.5, RUN_ORIGIN_Y)
       .setDepth(DEPTH.actor);
     const eyeGlow = this.add.rectangle(
       definition.x,
@@ -760,6 +767,7 @@ export class BulletReclaimerScene extends Phaser.Scene {
       dashVy: 0,
       moveVx: 0,
       moveVy: 0,
+      animationDistance: 0,
       nearMissReadyAt: this.time.now + 900,
       shootReadyAt: this.time.now + Phaser.Math.Between(isBoss ? 1000 : 1300, isBoss ? 1500 : 2100),
       shootTelegraphUntil: 0,
@@ -788,16 +796,18 @@ export class BulletReclaimerScene extends Phaser.Scene {
     const previousX = this.player.x;
     const previousY = this.player.y;
     this.tryMoveCircle(this.player, this.playerVelocity.x * dt, this.playerVelocity.y * dt, PLAYER_RADIUS);
+    const movedDistance = Phaser.Math.Distance.Between(previousX, previousY, this.player.x, this.player.y);
+    this.playerStrideDistance += movedDistance;
     if (Math.abs(this.player.x - previousX) < 0.01) this.playerVelocity.x *= 0.2;
     if (Math.abs(this.player.y - previousY) < 0.01) this.playerVelocity.y *= 0.2;
     if (Math.abs(this.playerVelocity.x) > 8) this.player.setFlipX(this.playerVelocity.x < 0);
 
     const movement = Math.min(1, this.playerVelocity.length() / PLAYER_SPEED);
     if (movement > 0.14) {
-      const runFrame = Math.floor(this.time.now / 72) % 8;
-      this.player.setTexture("hero-run-v4", runFrame).setOrigin(0.5, 0.922).setScale(0.17);
+      const runFrame = Math.floor(this.playerStrideDistance / 8.5) % 12;
+      this.player.setTexture("hero-run-v5", runFrame).setOrigin(0.5, RUN_ORIGIN_Y).setScale(0.17);
     } else {
-      this.player.setTexture("hero-v2", 0).setOrigin(0.5, 0.775).setScale(0.145);
+      this.player.setTexture("hero-v2", 0).setOrigin(0.5, HERO_ACTION_ORIGIN_Y).setScale(0.145);
     }
   }
 
@@ -862,6 +872,7 @@ export class BulletReclaimerScene extends Phaser.Scene {
       }
       this.tryMoveCircle(enemy.body, enemy.moveVx * dt, enemy.moveVy * dt, enemy.radius);
       const moved = Phaser.Math.Distance.Between(previousX, previousY, enemy.body.x, enemy.body.y);
+      enemy.animationDistance += moved;
       const requestedDistance = Math.hypot(enemy.moveVx, enemy.moveVy) * dt;
       if (isEnemyMovementBlocked(currentSpeed, chaseSpeed, moved, requestedDistance)) {
         enemy.moveVx *= 0.25;
@@ -1015,6 +1026,7 @@ export class BulletReclaimerScene extends Phaser.Scene {
       const beforeX = enemy.body.x;
       const beforeY = enemy.body.y;
       this.tryMoveCircle(enemy.body, this.bossPatternTarget.x * speed * dt, this.bossPatternTarget.y * speed * dt, enemy.radius);
+      enemy.animationDistance += Phaser.Math.Distance.Between(beforeX, beforeY, enemy.body.x, enemy.body.y);
       this.syncEnemyVisual(enemy);
       if (brokeCover) this.burst(enemy.body.x, enemy.body.y, 0xffa27e, 15);
       if (now >= this.bossPatternUntil || Phaser.Math.Distance.Between(beforeX, beforeY, enemy.body.x, enemy.body.y) < speed * dt * 0.28) {
@@ -1281,6 +1293,7 @@ export class BulletReclaimerScene extends Phaser.Scene {
       const dashSpeed = enemy.speed * speedMultiplier * (enemy.kind === "boss" ? 2.75 : 3.4);
       this.tryMoveCircle(enemy.body, enemy.dashVx * dashSpeed * dt, enemy.dashVy * dashSpeed * dt, enemy.radius);
       const moved = Phaser.Math.Distance.Between(previousX, previousY, enemy.body.x, enemy.body.y);
+      enemy.animationDistance += moved;
       this.syncEnemyVisual(enemy);
       if (Math.abs(enemy.dashVx) > 0.05) enemy.body.setFlipX(enemy.dashVx < 0);
       if (now >= enemy.dashUntil || moved < dashSpeed * dt * 0.35) {
@@ -1309,27 +1322,27 @@ export class BulletReclaimerScene extends Phaser.Scene {
     const movementSpeed = Math.hypot(enemy.moveVx, enemy.moveVy);
     if (enemy.kind === "chaser") {
       const moving = movementSpeed > 12 || enemy.dashState === "dashing";
-      const runFrame = Math.floor((this.time.now + enemy.body.x * 1.5) / 66) % 8;
+      const runFrame = Math.floor(enemy.animationDistance / (enemy.dashState === "dashing" ? 7 : 8.5)) % 12;
       enemy.body
-        .setTexture("chaser-run-v4", enemy.dashState === "dashing" ? runFrame : moving ? runFrame : 0)
-        .setOrigin(0.5, 0.922)
+        .setTexture("chaser-run-v5", moving ? runFrame : 0)
+        .setOrigin(0.5, RUN_ORIGIN_Y)
         .setScale(enemy.dashState === "dashing" ? 0.18 : 0.16);
     } else if (enemy.kind === "shooter") {
       const moving = movementSpeed > 10;
-      const runFrame = Math.floor((this.time.now + enemy.body.x) / 78) % 8;
+      const runFrame = Math.floor(enemy.animationDistance / 8.5) % 12;
       enemy.body
-        .setTexture("shooter-run-v3", moving && enemy.shootTelegraphUntil <= 0 ? runFrame : 0)
-        .setOrigin(0.5, 0.922)
+        .setTexture("shooter-run-v4", moving && enemy.shootTelegraphUntil <= 0 ? runFrame : 0)
+        .setOrigin(0.5, RUN_ORIGIN_Y)
         .setScale(0.135);
     } else {
       const moving = movementSpeed > 8 || this.bossPattern === "charging" || this.bossPattern === "leaping";
-      const runFrame = Math.floor(this.time.now / 96) % 8;
+      const runFrame = Math.floor(enemy.animationDistance / 12) % 12;
       enemy.body
-        .setTexture("boss-run-v3", moving ? runFrame : 0)
-        .setOrigin(0.5, 0.922)
+        .setTexture("boss-run-v4", moving ? runFrame : 0)
+        .setOrigin(0.5, RUN_ORIGIN_Y)
         .setScale(0.27);
     }
-    enemy.halo.setPosition(enemy.body.x, enemy.body.y + (enemy.kind === "boss" ? 10 : 6));
+    enemy.halo.setPosition(enemy.body.x, enemy.body.y + (enemy.kind === "boss" ? 4 : 2));
     enemy.eyeGlow.setPosition(enemy.body.x, enemy.body.y - (enemy.kind === "boss" ? 70 : enemy.kind === "shooter" ? 32 : 50));
   }
 
@@ -1720,7 +1733,7 @@ export class BulletReclaimerScene extends Phaser.Scene {
     const direction = new Phaser.Math.Vector2(pointer.worldX - this.player.x, pointer.worldY - this.player.y);
     if (direction.lengthSq() === 0) return;
     direction.normalize();
-    this.player.setTexture("hero-v2", 3).setOrigin(0.5, 0.775).setFlipX(direction.x < 0).setScale(0.145);
+    this.player.setTexture("hero-v2", 3).setOrigin(0.5, HERO_ACTION_ORIGIN_Y).setFlipX(direction.x < 0).setScale(0.145);
     const x = this.player.x + direction.x * BULLET_MUZZLE_OFFSET;
     const y = this.player.y + direction.y * BULLET_MUZZLE_OFFSET;
     // Planning shows commitment, not a solved ricochet. Every bounce after this vector is unknown.
