@@ -85,14 +85,8 @@ export const STAGES: StageDefinition[] = [
     name: "RECLAIMER CORE",
     briefing: "코어의 보호막을 세 번 파괴하고 마지막 탄환을 회수하라",
     player: { x: 145, y: 590 },
-    obstacles: [
-      { x: 285, y: 165, width: 76, height: 300 },
-      { x: 470, y: 500, width: 210, height: 66 },
-      { x: 520, y: 120, width: 210, height: 66 },
-      { x: 785, y: 250, width: 76, height: 300 },
-      { x: 970, y: 145, width: 150, height: 66 },
-      { x: 970, y: 510, width: 150, height: 66 },
-    ],
+    // The boss arena starts clean. Its jump pattern drops the only cover the player can use.
+    obstacles: [],
     enemies: [
       { x: 470, y: 330, speed: 54, kind: "shooter" },
       { x: 920, y: 600, speed: 82 },
