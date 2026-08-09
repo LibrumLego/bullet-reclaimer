@@ -15,9 +15,10 @@ import {
   RECOVERY_GRACE_MS,
 } from "./constants";
 import heroActionV2Url from "../assets/hero-action-v2.png";
-import enemyCastV2Url from "../assets/enemy-cast-v2.png";
-import heroRunV3Url from "../assets/hero-run-v3.png";
-import chaserRunV3Url from "../assets/chaser-run-v3.png";
+import heroRunV4Url from "../assets/hero-run-v4.png";
+import chaserRunV4Url from "../assets/chaser-run-v4.png";
+import shooterRunV3Url from "../assets/shooter-run-v3.png";
+import bossRunV3Url from "../assets/boss-run-v3.png";
 import { nearestCombinedRayHit, rayRectangleHit, segmentCircleHit } from "./geometry";
 import { findNavigationPath, hasClearPath } from "./pathfinding";
 import { calculateRiskReward, enemyPressureMultiplier } from "./risk";
@@ -132,9 +133,10 @@ export class BulletReclaimerScene extends Phaser.Scene {
 
   preload(): void {
     this.load.spritesheet("hero-v2", heroActionV2Url, { frameWidth: 443, frameHeight: 887 });
-    this.load.spritesheet("enemy-cast-v2", enemyCastV2Url, { frameWidth: 495, frameHeight: 793 });
-    this.load.spritesheet("hero-run-v3", heroRunV3Url, { frameWidth: 512, frameHeight: 512 });
-    this.load.spritesheet("chaser-run-v3", chaserRunV3Url, { frameWidth: 512, frameHeight: 512 });
+    this.load.spritesheet("hero-run-v4", heroRunV4Url, { frameWidth: 512, frameHeight: 512 });
+    this.load.spritesheet("chaser-run-v4", chaserRunV4Url, { frameWidth: 512, frameHeight: 512 });
+    this.load.spritesheet("shooter-run-v3", shooterRunV3Url, { frameWidth: 512, frameHeight: 512 });
+    this.load.spritesheet("boss-run-v3", bossRunV3Url, { frameWidth: 512, frameHeight: 512 });
   }
 
   private compactPoint(point: { x: number; y: number }): { x: number; y: number } {
@@ -719,11 +721,11 @@ export class BulletReclaimerScene extends Phaser.Scene {
     const body = this.add.sprite(
       definition.x,
       definition.y,
-      isBoss || isShooter ? "enemy-cast-v2" : "chaser-run-v3",
-      isBoss ? 2 : 0,
+      isBoss ? "boss-run-v3" : isShooter ? "shooter-run-v3" : "chaser-run-v4",
+      0,
     )
-      .setScale(isBoss ? 0.22 : isShooter ? 0.115 : 0.16)
-      .setOrigin(0.5, isBoss || isShooter ? 0.86 : 0.922)
+      .setScale(isBoss ? 0.27 : isShooter ? 0.135 : 0.16)
+      .setOrigin(0.5, 0.922)
       .setDepth(DEPTH.actor);
     const eyeGlow = this.add.rectangle(
       definition.x,
@@ -792,8 +794,8 @@ export class BulletReclaimerScene extends Phaser.Scene {
 
     const movement = Math.min(1, this.playerVelocity.length() / PLAYER_SPEED);
     if (movement > 0.14) {
-      const runFrame = Math.floor(this.time.now / 65) % 6;
-      this.player.setTexture("hero-run-v3", runFrame).setOrigin(0.5, 0.922).setScale(0.17);
+      const runFrame = Math.floor(this.time.now / 72) % 8;
+      this.player.setTexture("hero-run-v4", runFrame).setOrigin(0.5, 0.922).setScale(0.17);
     } else {
       this.player.setTexture("hero-v2", 0).setOrigin(0.5, 0.775).setScale(0.145);
     }
@@ -869,7 +871,7 @@ export class BulletReclaimerScene extends Phaser.Scene {
         enemy.nextPathAt = this.time.now + 50;
       }
       this.syncEnemyVisual(enemy);
-      if (Math.abs(enemy.moveVx) > 4) enemy.body.setFlipX(enemy.moveVx > 0);
+      if (Math.abs(enemy.moveVx) > 4) enemy.body.setFlipX(enemy.moveVx < 0);
     }
   }
 
@@ -933,7 +935,7 @@ export class BulletReclaimerScene extends Phaser.Scene {
     const boss = this.enemies.find((enemy) => enemy.kind === "boss");
     if (!boss) return;
     boss.invulnerable = true;
-    boss.body.setPosition(ARENA.centerX, ARENA.top - 84).setAlpha(0).setScale(0.18);
+    boss.body.setPosition(ARENA.centerX, ARENA.top - 84).setAlpha(0).setScale(0.21);
     boss.halo.setPosition(ARENA.centerX, ARENA.top - 74).setAlpha(0);
     boss.eyeGlow.setPosition(ARENA.centerX, ARENA.top - 154).setAlpha(0);
     this.showBossPattern("CORE DESCENT // 중앙 코어가 강하한다", "#e3a7ff");
@@ -946,7 +948,7 @@ export class BulletReclaimerScene extends Phaser.Scene {
     this.tweens.add({
       targets: boss.body,
       y: ARENA.centerY - 24,
-      scale: 0.22,
+      scale: 0.27,
       duration: 920,
       ease: "Cubic.Out",
       onComplete: () => {
@@ -1280,7 +1282,7 @@ export class BulletReclaimerScene extends Phaser.Scene {
       this.tryMoveCircle(enemy.body, enemy.dashVx * dashSpeed * dt, enemy.dashVy * dashSpeed * dt, enemy.radius);
       const moved = Phaser.Math.Distance.Between(previousX, previousY, enemy.body.x, enemy.body.y);
       this.syncEnemyVisual(enemy);
-      if (Math.abs(enemy.dashVx) > 0.05) enemy.body.setFlipX(enemy.dashVx > 0);
+      if (Math.abs(enemy.dashVx) > 0.05) enemy.body.setFlipX(enemy.dashVx < 0);
       if (now >= enemy.dashUntil || moved < dashSpeed * dt * 0.35) {
         enemy.dashState = "chase";
         enemy.dashReadyAt = now + (aggressive ? Phaser.Math.Between(800, 1400) : Phaser.Math.Between(1600, 2800));
@@ -1304,18 +1306,28 @@ export class BulletReclaimerScene extends Phaser.Scene {
   }
 
   private syncEnemyVisual(enemy: Enemy): void {
+    const movementSpeed = Math.hypot(enemy.moveVx, enemy.moveVy);
     if (enemy.kind === "chaser") {
-      const moving = Math.hypot(enemy.moveVx, enemy.moveVy) > 12 || enemy.dashState === "dashing";
-      const runFrame = Math.floor((this.time.now + enemy.body.x * 1.5) / 60) % 6;
+      const moving = movementSpeed > 12 || enemy.dashState === "dashing";
+      const runFrame = Math.floor((this.time.now + enemy.body.x * 1.5) / 66) % 8;
       enemy.body
-        .setTexture("chaser-run-v3", enemy.dashState === "dashing" ? 5 : moving ? runFrame : 0)
+        .setTexture("chaser-run-v4", enemy.dashState === "dashing" ? runFrame : moving ? runFrame : 0)
         .setOrigin(0.5, 0.922)
         .setScale(enemy.dashState === "dashing" ? 0.18 : 0.16);
     } else if (enemy.kind === "shooter") {
-      enemy.body.setTexture("enemy-cast-v2", enemy.shootTelegraphUntil > 0 ? 1 : 0);
+      const moving = movementSpeed > 10;
+      const runFrame = Math.floor((this.time.now + enemy.body.x) / 78) % 8;
+      enemy.body
+        .setTexture("shooter-run-v3", moving && enemy.shootTelegraphUntil <= 0 ? runFrame : 0)
+        .setOrigin(0.5, 0.922)
+        .setScale(0.135);
     } else {
-      const attacking = this.bossPattern === "charging" || this.bossPattern === "telegraph-charge";
-      enemy.body.setTexture("enemy-cast-v2", attacking ? 3 : 2);
+      const moving = movementSpeed > 8 || this.bossPattern === "charging" || this.bossPattern === "leaping";
+      const runFrame = Math.floor(this.time.now / 96) % 8;
+      enemy.body
+        .setTexture("boss-run-v3", moving ? runFrame : 0)
+        .setOrigin(0.5, 0.922)
+        .setScale(0.27);
     }
     enemy.halo.setPosition(enemy.body.x, enemy.body.y + (enemy.kind === "boss" ? 10 : 6));
     enemy.eyeGlow.setPosition(enemy.body.x, enemy.body.y - (enemy.kind === "boss" ? 70 : enemy.kind === "shooter" ? 32 : 50));
