@@ -35,7 +35,7 @@ export const STAGES: StageDefinition[] = [
       { x: 675, y: 200, speed: 70 },
       { x: 815, y: 390, speed: 72 },
       { x: 1090, y: 180, speed: 65 },
-      { x: 1080, y: 570, speed: 74 },
+      { x: 1080, y: 570, speed: 54, kind: "shooter" },
     ],
   },
   {
@@ -52,10 +52,10 @@ export const STAGES: StageDefinition[] = [
     ],
     enemies: [
       { x: 340, y: 270, speed: 72 },
-      { x: 690, y: 150, speed: 76 },
+      { x: 690, y: 150, speed: 54, kind: "shooter" },
       { x: 710, y: 430, speed: 73 },
       { x: 1010, y: 250, speed: 79 },
-      { x: 1100, y: 590, speed: 70 },
+      { x: 1100, y: 590, speed: 52, kind: "shooter" },
     ],
   },
   {
@@ -78,7 +78,7 @@ export const STAGES: StageDefinition[] = [
       { x: 700, y: 500, speed: 86 },
       { x: 900, y: 330, speed: 78 },
       { x: 1150, y: 220, speed: 84 },
-      { x: 1130, y: 620, speed: 80 },
+      { x: 1130, y: 620, speed: 56, kind: "shooter" },
     ],
   },
   {
@@ -94,9 +94,9 @@ export const STAGES: StageDefinition[] = [
       { x: 970, y: 510, width: 150, height: 66 },
     ],
     enemies: [
-      { x: 470, y: 330, speed: 80 },
+      { x: 470, y: 330, speed: 54, kind: "shooter" },
       { x: 920, y: 600, speed: 82 },
-      { x: 1080, y: 330, speed: 68, kind: "boss", health: 3 },
+      { x: 1080, y: 330, speed: 74, kind: "boss", health: 4 },
     ],
   },
 ];

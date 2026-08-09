@@ -13,12 +13,12 @@ import {
   PLAYER_SPEED,
 } from "./constants";
 import { nearestCombinedRayHit, rayRectangleHit, segmentCircleHit } from "./geometry";
-import { findNavigationPath } from "./pathfinding";
+import { findNavigationPath, hasClearPath } from "./pathfinding";
 import { calculateRiskReward, enemyPressureMultiplier } from "./risk";
 import { SoundManager } from "./SoundManager";
 import { STAGES } from "./stages";
 import { canEnemiesMove, canPlayerMove, isEnemyMovementBlocked } from "./stateRules";
-import type { Bullet, Enemy, EnemyDefinition, GameState, StageDefinition } from "./types";
+import type { Bullet, Enemy, EnemyDefinition, EnemyProjectile, GameState, StageDefinition } from "./types";
 
 type Impact =
   | { t: number; kind: "player" }
@@ -32,6 +32,7 @@ export class BulletReclaimerScene extends Phaser.Scene {
   private player!: Phaser.GameObjects.Sprite;
   private playerRing!: Phaser.GameObjects.Ellipse;
   private enemies: Enemy[] = [];
+  private enemyProjectiles: EnemyProjectile[] = [];
   private obstacles: Phaser.Geom.Rectangle[] = [];
   private bullet?: Bullet;
   private state: GameState = "title";
@@ -74,6 +75,7 @@ export class BulletReclaimerScene extends Phaser.Scene {
   init(data: { stageIndex?: number; showTitle?: boolean; score?: number } = {}): void {
     this.stageIndex = Phaser.Math.Clamp(data.stageIndex ?? 0, 0, STAGES.length - 1);
     this.enemies = [];
+    this.enemyProjectiles = [];
     this.obstacles = [];
     this.bullet = undefined;
     this.titleLayer = undefined;
@@ -242,6 +244,7 @@ export class BulletReclaimerScene extends Phaser.Scene {
 
     if (canEnemiesMove(this.state)) {
       this.moveEnemies(dt);
+      this.moveEnemyProjectiles(dt);
       this.checkEnemyNearMisses();
       this.checkEnemyContact();
     } else if (this.state === "bullet") {
@@ -329,6 +332,23 @@ export class BulletReclaimerScene extends Phaser.Scene {
     };
     makeTexture("enemy", 22, 20, () => drawHunter(false));
     makeTexture("enemy-step", 22, 20, () => drawHunter(true));
+
+    makeTexture("shooter", 24, 22, () => {
+      g.fillStyle(0x0d1728).fillRect(4, 5, 16, 14);
+      g.fillStyle(0x244a70).fillRect(2, 7, 20, 10);
+      g.fillStyle(0x3d7897).fillRect(5, 4, 14, 12);
+      g.fillStyle(0x101c31).fillRect(7, 7, 10, 6);
+      g.fillStyle(0x8bf5f1).fillRect(8, 9, 3, 2).fillRect(14, 9, 3, 2);
+      g.fillStyle(0x75b8dd).fillRect(9, 1, 6, 4);
+      g.fillStyle(0x15263c).fillRect(0, 10, 4, 5).fillRect(20, 10, 4, 5);
+      g.fillStyle(0x66d8e6).fillRect(10, 17, 4, 4);
+    });
+
+    makeTexture("enemy-bolt", 10, 6, () => {
+      g.fillStyle(0x15334d).fillRect(0, 1, 3, 4);
+      g.fillStyle(0x54d9ef).fillRect(2, 0, 5, 6);
+      g.fillStyle(0xe1ffff).fillRect(6, 1, 4, 4);
+    });
 
     makeTexture("boss", 36, 40, () => {
       g.fillStyle(0x140c24).fillRect(8, 4, 20, 32);
@@ -547,28 +567,30 @@ export class BulletReclaimerScene extends Phaser.Scene {
     const kind = definition.kind ?? "chaser";
     const radius = kind === "boss" ? 42 : 12;
     const health = definition.health ?? 1;
-    const color = kind === "boss" ? 0xb06cff : 0xff637b;
+    const color = kind === "boss" ? 0xb06cff : kind === "shooter" ? 0x6ee8ef : 0xff637b;
+    const isBoss = kind === "boss";
+    const isShooter = kind === "shooter";
     const halo = this.add.ellipse(
       definition.x,
-      definition.y + (kind === "boss" ? 27 : 13),
-      kind === "boss" ? 112 : 40,
-      kind === "boss" ? 32 : 13,
-      kind === "boss" ? 0x2b1244 : 0x240b18,
+      definition.y + (isBoss ? 27 : 13),
+      isBoss ? 112 : 40,
+      isBoss ? 32 : 13,
+      isBoss ? 0x2b1244 : isShooter ? 0x102c43 : 0x240b18,
       0.62,
     ).setDepth(DEPTH.actor - 1);
-    const body = this.add.sprite(definition.x, definition.y, kind === "boss" ? "boss" : "enemy")
-      .setScale(kind === "boss" ? 2.65 : 1.72)
+    const body = this.add.sprite(definition.x, definition.y, isBoss ? "boss" : isShooter ? "shooter" : "enemy")
+      .setScale(isBoss ? 2.65 : 1.72)
       .setOrigin(0.5, 0.72)
       .setDepth(DEPTH.actor);
     const eyeGlow = this.add.rectangle(
       definition.x,
-      definition.y - (kind === "boss" ? 17 : 7),
-      kind === "boss" ? 34 : 17,
-      kind === "boss" ? 6 : 4,
-      kind === "boss" ? 0xe9b7ff : 0xffdf72,
+      definition.y - (isBoss ? 17 : 7),
+      isBoss ? 34 : 17,
+      isBoss ? 6 : 4,
+      isBoss ? 0xe9b7ff : isShooter ? 0x85f7ff : 0xffdf72,
       0.18,
     ).setDepth(DEPTH.actor + 1);
-    if (kind === "boss") body.setTint(color);
+    if (isBoss || isShooter) body.setTint(color);
     return {
       body,
       halo,
@@ -584,7 +606,7 @@ export class BulletReclaimerScene extends Phaser.Scene {
       nextPathAt: 0,
       lastTargetX: Number.NaN,
       lastTargetY: Number.NaN,
-      canDash: kind === "boss" || definition.speed >= 54,
+      canDash: !isShooter && (isBoss || definition.speed >= 54),
       dashState: "chase",
       dashReadyAt: this.time.now + Phaser.Math.Between(1100, 2300),
       dashUntil: 0,
@@ -593,6 +615,7 @@ export class BulletReclaimerScene extends Phaser.Scene {
       moveVx: 0,
       moveVy: 0,
       nearMissReadyAt: this.time.now + 900,
+      shootReadyAt: this.time.now + Phaser.Math.Between(isBoss ? 1000 : 1300, isBoss ? 1500 : 2100),
     };
   }
 
@@ -634,26 +657,32 @@ export class BulletReclaimerScene extends Phaser.Scene {
     for (const enemy of this.enemies) {
       if (!enemy.alive) continue;
       this.updateEnemyThreatVisual(enemy, unarmed);
+      if (enemy.kind === "boss") this.updateBossBarrage(enemy);
+      if (enemy.kind === "shooter") this.updateShooterAttack(enemy);
       if (this.updateEnemyDash(enemy, dt, pressureMultiplier, unarmed)) continue;
 
+      const navigationTarget = enemy.kind === "shooter"
+        ? this.getShooterNavigationTarget(enemy)
+        : { x: this.player.x, y: this.player.y };
+
       const targetMoved = !Number.isFinite(enemy.lastTargetX)
-        || Phaser.Math.Distance.Between(enemy.lastTargetX, enemy.lastTargetY, this.player.x, this.player.y) > 24;
+        || Phaser.Math.Distance.Between(enemy.lastTargetX, enemy.lastTargetY, navigationTarget.x, navigationTarget.y) > 24;
       const needsPath = enemy.pathIndex >= enemy.path.length;
       if (this.time.now >= enemy.nextPathAt && (needsPath || targetMoved)) {
         enemy.path = findNavigationPath(
           { x: enemy.body.x, y: enemy.body.y },
-          { x: this.player.x, y: this.player.y },
+          navigationTarget,
           ARENA,
           this.obstacles,
           enemy.radius,
         );
         enemy.pathIndex = 0;
         const pathInterval = unarmed
-          ? enemy.kind === "boss" ? 85 : 115
-          : enemy.kind === "boss" ? 150 : 200;
+          ? enemy.kind === "boss" ? 85 : enemy.kind === "shooter" ? 130 : 115
+          : enemy.kind === "boss" ? 150 : enemy.kind === "shooter" ? 220 : 200;
         enemy.nextPathAt = this.time.now + pathInterval + Phaser.Math.Between(0, 70);
-        enemy.lastTargetX = this.player.x;
-        enemy.lastTargetY = this.player.y;
+        enemy.lastTargetX = navigationTarget.x;
+        enemy.lastTargetY = navigationTarget.y;
       }
 
       while (enemy.pathIndex < enemy.path.length - 1) {
@@ -670,7 +699,7 @@ export class BulletReclaimerScene extends Phaser.Scene {
       const previousX = enemy.body.x;
       const previousY = enemy.body.y;
       const chaseSpeed = enemy.speed * pressureMultiplier;
-      const steering = 1 - Math.exp(-(enemy.kind === "boss" ? 5.5 : 8) * dt);
+      const steering = 1 - Math.exp(-(enemy.kind === "boss" ? 5.5 : enemy.kind === "shooter" ? 6.5 : 8) * dt);
       enemy.moveVx = Phaser.Math.Linear(enemy.moveVx, direction.x * chaseSpeed, steering);
       enemy.moveVy = Phaser.Math.Linear(enemy.moveVy, direction.y * chaseSpeed, steering);
       const currentSpeed = Math.hypot(enemy.moveVx, enemy.moveVy);
@@ -693,7 +722,117 @@ export class BulletReclaimerScene extends Phaser.Scene {
     }
   }
 
+  private getShooterNavigationTarget(enemy: Enemy): { x: number; y: number } {
+    const away = new Phaser.Math.Vector2(enemy.body.x - this.player.x, enemy.body.y - this.player.y);
+    const distance = away.length();
+    if (distance < 0.01) away.set(1, 0);
+    else away.scale(1 / distance);
+
+    if (distance < 205) {
+      return { x: this.player.x + away.x * 310, y: this.player.y + away.y * 310 };
+    }
+    if (distance > 370) return { x: this.player.x, y: this.player.y };
+
+    // Alternate orbit direction by position so multiple shooters do not stack on one route.
+    const orbitSign = Math.sin(enemy.body.x * 0.017 + enemy.body.y * 0.009) > 0 ? 1 : -1;
+    return {
+      x: this.player.x - away.y * 280 * orbitSign,
+      y: this.player.y + away.x * 280 * orbitSign,
+    };
+  }
+
+  private updateShooterAttack(enemy: Enemy): void {
+    const now = this.time.now;
+    if (now < enemy.shootReadyAt) return;
+    const direction = new Phaser.Math.Vector2(this.player.x - enemy.body.x, this.player.y - enemy.body.y);
+    const distance = direction.length();
+    if (distance < 130 || distance > 610 || !hasClearPath(
+      { x: enemy.body.x, y: enemy.body.y },
+      { x: this.player.x, y: this.player.y },
+      ARENA,
+      this.obstacles,
+      2,
+    )) {
+      enemy.shootReadyAt = now + 260;
+      return;
+    }
+    direction.scale(1 / distance);
+    this.spawnEnemyProjectile(enemy.body.x, enemy.body.y - 4, direction.x, direction.y, 300, 0x6ee8ef);
+    enemy.shootReadyAt = now + Phaser.Math.Between(1450, 1900);
+    enemy.eyeGlow.setAlpha(1);
+    this.cameras.main.flash(45, 70, 210, 225, false);
+  }
+
+  private updateBossBarrage(enemy: Enemy): void {
+    if (this.time.now < enemy.shootReadyAt || enemy.dashState !== "chase") return;
+    const phase = enemy.maxHealth - enemy.health + 1;
+    const direction = new Phaser.Math.Vector2(this.player.x - enemy.body.x, this.player.y - enemy.body.y);
+    if (direction.lengthSq() < 1) return;
+    direction.normalize();
+    const count = phase >= 4 ? 5 : phase >= 3 ? 4 : 3;
+    const spread = phase >= 4 ? 0.72 : 0.46;
+    for (let index = 0; index < count; index += 1) {
+      const offset = Phaser.Math.Linear(-spread / 2, spread / 2, index / (count - 1));
+      const angle = Math.atan2(direction.y, direction.x) + offset;
+      this.spawnEnemyProjectile(enemy.body.x, enemy.body.y - 9, Math.cos(angle), Math.sin(angle), 260 + phase * 18, 0xd9a3ff);
+    }
+    enemy.shootReadyAt = this.time.now + Math.max(900, 1850 - phase * 190);
+    this.burst(enemy.body.x, enemy.body.y, 0xc77dff, 9);
+    this.sounds.dashWarning();
+  }
+
+  private spawnEnemyProjectile(x: number, y: number, dx: number, dy: number, speed: number, tint: number): void {
+    const body = this.add.sprite(x, y, "enemy-bolt")
+      .setTint(tint)
+      .setScale(1.15)
+      .setDepth(DEPTH.effects + 1)
+      .setRotation(Math.atan2(dy, dx));
+    this.enemyProjectiles.push({
+      body,
+      vx: dx * speed,
+      vy: dy * speed,
+      radius: 4,
+      expiresAt: this.time.now + 3200,
+    });
+  }
+
+  private moveEnemyProjectiles(dt: number): void {
+    for (let index = this.enemyProjectiles.length - 1; index >= 0; index -= 1) {
+      const projectile = this.enemyProjectiles[index];
+      const startX = projectile.body.x;
+      const startY = projectile.body.y;
+      const nextX = startX + projectile.vx * dt;
+      const nextY = startY + projectile.vy * dt;
+      const hitPlayer = segmentCircleHit(
+        startX,
+        startY,
+        nextX,
+        nextY,
+        this.player.x,
+        this.player.y,
+        PLAYER_RADIUS + projectile.radius,
+      );
+      const expires = this.time.now >= projectile.expiresAt
+        || nextX < ARENA.left || nextX > ARENA.right || nextY < ARENA.top || nextY > ARENA.bottom
+        || this.circleHitsObstacle(nextX, nextY, projectile.radius);
+      if (hitPlayer !== undefined) {
+        projectile.body.destroy();
+        this.enemyProjectiles.splice(index, 1);
+        this.lose();
+        return;
+      }
+      if (expires) {
+        projectile.body.destroy();
+        this.enemyProjectiles.splice(index, 1);
+        continue;
+      }
+      projectile.body.setPosition(nextX, nextY);
+      projectile.body.setRotation(Math.atan2(projectile.vy, projectile.vx));
+    }
+  }
+
   private updateEnemyDash(enemy: Enemy, dt: number, speedMultiplier: number, aggressive: boolean): boolean {
+    if (enemy.kind === "shooter") return false;
     const now = this.time.now;
     if (enemy.dashState === "telegraph") {
       if (now < enemy.dashUntil) {
@@ -746,7 +885,7 @@ export class BulletReclaimerScene extends Phaser.Scene {
   }
 
   private syncEnemyVisual(enemy: Enemy): void {
-    if (enemy.kind !== "boss") {
+    if (enemy.kind === "chaser") {
       const moving = Math.hypot(enemy.moveVx, enemy.moveVy) > 12 || enemy.dashState === "dashing";
       const stepPhase = Math.floor((this.time.now + enemy.body.x * 2) / 125) % 2 === 0;
       enemy.body.setTexture(moving && stepPhase ? "enemy-step" : "enemy");
@@ -757,21 +896,22 @@ export class BulletReclaimerScene extends Phaser.Scene {
 
   private restoreEnemyAppearance(enemy: Enemy): void {
     if (enemy.kind === "boss") enemy.body.setTint(0xb06cff);
+    else if (enemy.kind === "shooter") enemy.body.setTint(0x6ee8ef);
     else enemy.body.clearTint();
-    enemy.halo.setFillStyle(enemy.kind === "boss" ? 0x2b1244 : 0x240b18, 0.62);
+    enemy.halo.setFillStyle(enemy.kind === "boss" ? 0x2b1244 : enemy.kind === "shooter" ? 0x102c43 : 0x240b18, 0.62);
     enemy.eyeGlow
-      .setFillStyle(enemy.kind === "boss" ? 0xe9b7ff : 0xffdf72, 1)
+      .setFillStyle(enemy.kind === "boss" ? 0xe9b7ff : enemy.kind === "shooter" ? 0x85f7ff : 0xffdf72, 1)
       .setAlpha(0.18);
   }
 
   private updateEnemyThreatVisual(enemy: Enemy, unarmed: boolean): void {
     if (enemy.dashState === "telegraph") return;
     const pulse = 0.76 + Math.sin(this.time.now * 0.016 + enemy.body.x) * 0.24;
-    const armedColor = enemy.kind === "boss" ? 0x2b1244 : 0x240b18;
-    const threatColor = enemy.kind === "boss" ? 0x51205f : 0x68142a;
+    const armedColor = enemy.kind === "boss" ? 0x2b1244 : enemy.kind === "shooter" ? 0x102c43 : 0x240b18;
+    const threatColor = enemy.kind === "boss" ? 0x51205f : enemy.kind === "shooter" ? 0x174b63 : 0x68142a;
     enemy.halo.setFillStyle(unarmed ? threatColor : armedColor, unarmed ? 0.9 : 0.62);
     enemy.eyeGlow
-      .setFillStyle(unarmed ? 0xffffb0 : enemy.kind === "boss" ? 0xe9b7ff : 0xffdf72, 1)
+      .setFillStyle(unarmed ? 0xffffb0 : enemy.kind === "boss" ? 0xe9b7ff : enemy.kind === "shooter" ? 0x85f7ff : 0xffdf72, 1)
       .setAlpha(unarmed ? 0.72 + pulse * 0.28 : 0.18);
   }
 
@@ -788,10 +928,48 @@ export class BulletReclaimerScene extends Phaser.Scene {
   }
 
   private tryMoveCircle(body: Phaser.GameObjects.Sprite, dx: number, dy: number, radius: number): void {
+    this.resolveCirclePenetration(body, radius);
     const nextX = Phaser.Math.Clamp(body.x + dx, ARENA.x + radius, ARENA.right - radius);
     const nextY = Phaser.Math.Clamp(body.y + dy, ARENA.y + radius, ARENA.bottom - radius);
     if (!this.circleHitsObstacle(nextX, body.y, radius)) body.x = nextX;
     if (!this.circleHitsObstacle(body.x, nextY, radius)) body.y = nextY;
+    this.resolveCirclePenetration(body, radius);
+  }
+
+  // Collision used to only reject the requested axis. A dash or a compressed map can
+  // leave an actor microscopically inside a corner, after which both axes are rejected.
+  // Depenetrating before and after movement guarantees a walkable escape direction.
+  private resolveCirclePenetration(body: Phaser.GameObjects.Sprite, radius: number): void {
+    for (let pass = 0; pass < 4; pass += 1) {
+      let corrected = false;
+      for (const rect of this.obstacles) {
+        const closestX = Phaser.Math.Clamp(body.x, rect.left, rect.right);
+        const closestY = Phaser.Math.Clamp(body.y, rect.top, rect.bottom);
+        const offsetX = body.x - closestX;
+        const offsetY = body.y - closestY;
+        const distance = Math.hypot(offsetX, offsetY);
+        if (distance >= radius - 0.001) continue;
+
+        if (distance > 0.001) {
+          const push = radius - distance + 0.06;
+          body.x += offsetX / distance * push;
+          body.y += offsetY / distance * push;
+        } else {
+          const exits = [
+            { distance: body.x - rect.left, x: rect.left - radius - 0.06, y: body.y },
+            { distance: rect.right - body.x, x: rect.right + radius + 0.06, y: body.y },
+            { distance: body.y - rect.top, x: body.x, y: rect.top - radius - 0.06 },
+            { distance: rect.bottom - body.y, x: body.x, y: rect.bottom + radius + 0.06 },
+          ];
+          const exit = exits.reduce((nearest, candidate) => candidate.distance < nearest.distance ? candidate : nearest);
+          body.setPosition(exit.x, exit.y);
+        }
+        body.x = Phaser.Math.Clamp(body.x, ARENA.x + radius, ARENA.right - radius);
+        body.y = Phaser.Math.Clamp(body.y, ARENA.y + radius, ARENA.bottom - radius);
+        corrected = true;
+      }
+      if (!corrected) break;
+    }
   }
 
   private circleHitsObstacle(x: number, y: number, radius: number): boolean {
@@ -967,21 +1145,34 @@ export class BulletReclaimerScene extends Phaser.Scene {
 
   private advanceBossPhase(enemy: Enemy): void {
     const phase = enemy.maxHealth - enemy.health + 1;
-    enemy.speed *= 1.18;
+    enemy.speed *= 1.24;
     enemy.canDash = true;
-    enemy.dashReadyAt = this.time.now + 520;
+    enemy.dashReadyAt = this.time.now + 260;
+    enemy.shootReadyAt = this.time.now + 380;
     this.cameras.main.flash(180, 105, 30, 145, false);
-    this.cameras.main.shake(220, 0.009);
+    this.cameras.main.shake(260, 0.011);
     this.sounds.phase();
     this.showFloatingText(enemy.body.x, enemy.body.y - 82, `CORE PHASE ${phase}`, "#e3a7ff");
+    this.updateBossBarrage(enemy);
 
-    const reinforcementAuthored = enemy.health === 2
-      ? { x: 1160, y: 260, speed: 88 }
-      : { x: 900, y: 120, speed: 94 };
-    const reinforcement = this.compactEnemy(reinforcementAuthored);
-    if (!this.circleHitsObstacle(reinforcement.x, reinforcement.y, 12)) {
+    const reinforcementAuthored: EnemyDefinition[] = enemy.health === 3
+      ? [{ x: 1160, y: 260, speed: 58, kind: "shooter" }]
+      : enemy.health === 2
+        ? [
+          { x: 900, y: 120, speed: 94 },
+          { x: 1160, y: 260, speed: 60, kind: "shooter" },
+        ]
+        : [
+          { x: 900, y: 120, speed: 98 },
+          { x: 1160, y: 260, speed: 64, kind: "shooter" },
+          { x: 920, y: 590, speed: 92 },
+        ];
+    for (const definition of reinforcementAuthored) {
+      const reinforcement = this.compactEnemy(definition);
+      if (this.circleHitsObstacle(reinforcement.x, reinforcement.y, 12)) continue;
       const minion = this.makeEnemy(reinforcement);
-      minion.dashReadyAt = this.time.now + 1100;
+      minion.dashReadyAt = this.time.now + 900;
+      minion.shootReadyAt = this.time.now + 1050;
       this.enemies.push(minion);
       this.burst(reinforcement.x, reinforcement.y, 0xb364ff, 18);
     }

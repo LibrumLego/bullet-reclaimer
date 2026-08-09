@@ -2,7 +2,7 @@ import type Phaser from "phaser";
 import type { NavigationPoint } from "./pathfinding";
 
 export type GameState = "title" | "playing" | "aiming" | "bullet" | "recover" | "won" | "lost";
-export type EnemyKind = "chaser" | "boss";
+export type EnemyKind = "chaser" | "shooter" | "boss";
 
 export interface EnemyDefinition {
   x: number;
@@ -51,6 +51,15 @@ export interface Enemy {
   moveVx: number;
   moveVy: number;
   nearMissReadyAt: number;
+  shootReadyAt: number;
+}
+
+export interface EnemyProjectile {
+  body: Phaser.GameObjects.Sprite;
+  vx: number;
+  vy: number;
+  radius: number;
+  expiresAt: number;
 }
 
 export interface Bullet {
