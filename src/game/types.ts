@@ -53,6 +53,9 @@ export interface Enemy {
   moveVy: number;
   nearMissReadyAt: number;
   shootReadyAt: number;
+  shootTelegraphUntil: number;
+  shootTargetX: number;
+  shootTargetY: number;
 }
 
 export interface EnemyProjectile {

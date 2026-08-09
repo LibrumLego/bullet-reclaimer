@@ -11,6 +11,8 @@ export const BULLET_SPEED = 760;
 export const MAX_BOUNCES = 5;
 export const PLAYER_RADIUS = 13;
 export const BULLET_RADIUS = 8;
+export const BULLET_RECLAIM_RADIUS = 46;
+export const RECOVERY_GRACE_MS = 680;
 
 export const DEPTH = {
   arena: 0,

@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import {
   ARENA,
+  BULLET_RECLAIM_RADIUS,
   BULLET_RADIUS,
   BULLET_SPEED,
   DEPTH,
@@ -11,7 +12,9 @@ import {
   PLAYER_DECELERATION,
   PLAYER_RADIUS,
   PLAYER_SPEED,
+  RECOVERY_GRACE_MS,
 } from "./constants";
+import heroRunSheetUrl from "../assets/hero-run-sheet-alpha.png";
 import { nearestCombinedRayHit, rayRectangleHit, segmentCircleHit } from "./geometry";
 import { findNavigationPath, hasClearPath } from "./pathfinding";
 import { calculateRiskReward, enemyPressureMultiplier } from "./risk";
@@ -72,6 +75,8 @@ export class BulletReclaimerScene extends Phaser.Scene {
   private riskText!: Phaser.GameObjects.Text;
   private bossPatternText!: Phaser.GameObjects.Text;
   private bossTelegraph!: Phaser.GameObjects.Graphics;
+  private enemyAimGuide!: Phaser.GameObjects.Graphics;
+  private tutorialText?: Phaser.GameObjects.Text;
   private recoveryPulse = 0;
   private initialEnemyCount = 0;
   private tensionPulseAt = 0;
@@ -80,6 +85,7 @@ export class BulletReclaimerScene extends Phaser.Scene {
   private combatTimeScale = 1;
   private aimStartedAt = 0;
   private nearMissCooldownAt = 0;
+  private recoveryGraceUntil = 0;
   private bossPattern: BossPattern = "none";
   private bossPatternUntil = 0;
   private bossPatternNextAt = 0;
@@ -112,12 +118,17 @@ export class BulletReclaimerScene extends Phaser.Scene {
     this.combatTimeScale = 1;
     this.aimStartedAt = 0;
     this.nearMissCooldownAt = 0;
+    this.recoveryGraceUntil = 0;
     this.bossPattern = "none";
     this.bossPatternUntil = 0;
     this.bossPatternNextAt = 0;
     this.bossPatternIndex = 0;
     this.bossPatternTarget.set(0, 0);
     this.playerVelocity.set(0, 0);
+  }
+
+  preload(): void {
+    this.load.spritesheet("hero-art", heroRunSheetUrl, { frameWidth: 511, frameHeight: 770 });
   }
 
   private compactPoint(point: { x: number; y: number }): { x: number; y: number } {
@@ -169,9 +180,9 @@ export class BulletReclaimerScene extends Phaser.Scene {
     this.createHud(stage);
 
     this.playerRing = this.add.ellipse(stage.player.x, stage.player.y + 14, 44, 14, 0x02050c, 0.68).setDepth(DEPTH.actor - 1);
-    this.player = this.add.sprite(stage.player.x, stage.player.y, "hero")
-      .setScale(1.7)
-      .setOrigin(0.5, 0.72)
+    this.player = this.add.sprite(stage.player.x, stage.player.y, "hero-art", 0)
+      .setScale(0.18)
+      .setOrigin(0.5, 0.78)
       .setDepth(DEPTH.actor);
     this.overlay = this.add.graphics().setDepth(DEPTH.freeze);
     this.aimGuide = this.add.graphics().setDepth(DEPTH.guide);
@@ -186,6 +197,7 @@ export class BulletReclaimerScene extends Phaser.Scene {
     }).setOrigin(0.5).setDepth(DEPTH.guide + 1).setVisible(false);
     this.recoveryGuide = this.add.graphics().setDepth(DEPTH.guide);
     this.bossTelegraph = this.add.graphics().setDepth(DEPTH.guide + 1);
+    this.enemyAimGuide = this.add.graphics().setDepth(DEPTH.guide + 1);
     this.dangerVignette = this.add.graphics().setDepth(DEPTH.actor + 1);
     this.dangerVignette
       .fillStyle(0x8b102b, 0.7)
@@ -270,19 +282,21 @@ export class BulletReclaimerScene extends Phaser.Scene {
       this.movePlayer(dt);
     } else if (this.state === "bullet") {
       this.playerVelocity.set(0, 0);
-      this.player.setTexture("hero").setScale(1.7);
+      this.player.setTexture("hero-art", 0).setScale(0.18);
     }
 
-    if (canEnemiesMove(this.state)) {
+    this.enemyAimGuide.clear();
+    const recoveryGraceActive = this.state === "recover" && this.time.now < this.recoveryGraceUntil;
+    if (canEnemiesMove(this.state) && !recoveryGraceActive) {
       this.moveEnemies(dt);
       this.moveEnemyProjectiles(dt);
       this.updateTemporaryCovers();
       this.checkEnemyNearMisses();
       this.checkEnemyContact();
-    } else if (this.state === "bullet") {
+    } else if (this.state === "bullet" || recoveryGraceActive) {
       for (const enemy of this.enemies) {
         if (!enemy.alive) continue;
-        this.updateEnemyThreatVisual(enemy, true);
+        this.updateEnemyThreatVisual(enemy, this.state === "recover");
         this.syncEnemyVisual(enemy);
       }
     }
@@ -293,7 +307,7 @@ export class BulletReclaimerScene extends Phaser.Scene {
       this.recoveryPulse += dt;
       const scale = 2 + Math.sin(this.recoveryPulse * 8) * 0.16;
       this.bullet.body.setScale(scale);
-      if (Phaser.Math.Distance.Between(this.player.x, this.player.y, this.bullet.body.x, this.bullet.body.y) < 28) {
+      if (Phaser.Math.Distance.Between(this.player.x, this.player.y, this.bullet.body.x, this.bullet.body.y) < BULLET_RECLAIM_RADIUS) {
         this.reclaimBullet();
       }
     }
@@ -307,7 +321,7 @@ export class BulletReclaimerScene extends Phaser.Scene {
       const eyePulse = 1 + Math.sin(this.time.now * 0.011 + enemy.body.y) * 0.12;
       enemy.eyeGlow.setScale(eyePulse, 1);
     }
-    this.playerRing.setPosition(this.player.x, this.player.y + 14);
+    this.playerRing.setPosition(this.player.x, this.player.y + 18);
   }
 
   private createPixelTextures(): void {
@@ -537,7 +551,7 @@ export class BulletReclaimerScene extends Phaser.Scene {
   private showTitleScreen(): void {
     this.overlay.clear().fillStyle(0x040812, 0.88).fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
 
-    const operative = this.add.sprite(425, 358, "hero").setScale(6.6).setOrigin(0.5, 0.72);
+    const operative = this.add.sprite(425, 382, "hero-art", 0).setScale(0.56).setOrigin(0.5, 0.78);
     const operativeGlow = this.add.ellipse(425, 430, 210, 42, 0x5ce0d0, 0.13);
     const kicker = this.add.text(626, 242, "TACTICAL RICOCHET // 01", {
       fontFamily: '"Segoe UI", sans-serif',
@@ -598,15 +612,18 @@ export class BulletReclaimerScene extends Phaser.Scene {
 
     this.stageText = this.add.text(54, 58, `STAGE ${this.stageIndex + 1}/${STAGES.length} · ${stage.name} — ${stage.briefing}`, {
       fontFamily: '"Segoe UI", sans-serif',
-      fontSize: "12px",
-      color: "#9fb4bc",
-      letterSpacing: 0.6,
+      fontSize: "14px",
+      fontStyle: "bold",
+      color: "#b9d5df",
+      letterSpacing: 0.8,
     }).setDepth(DEPTH.hud);
+
+    this.stageText.setText(`STAGE ${this.stageIndex + 1}/${STAGES.length}  //  ${stage.name}`);
 
     this.objectiveText = this.add.text(54, 678, "", {
       fontFamily: '"Segoe UI", sans-serif',
-      fontSize: "13px",
-      color: "#a5b8be",
+      fontSize: "14px",
+      color: "#c3d5db",
     }).setDepth(DEPTH.hud);
 
     this.scoreText = this.add.text(1226, 678, "", {
@@ -635,10 +652,21 @@ export class BulletReclaimerScene extends Phaser.Scene {
 
     this.add.text(GAME_WIDTH / 2, 40, "WASD 이동  ·  마우스 누름: 시간 정지 조준  ·  놓기: 발사  ·  우클릭/ESC: 취소  ·  R: 재시작", {
       fontFamily: '"Segoe UI", sans-serif',
-      fontSize: "12px",
-      color: "#80969f",
-      letterSpacing: 0.4,
+      fontSize: "13px",
+      color: "#a7c2ca",
+      letterSpacing: 0.55,
     }).setOrigin(0.5).setDepth(DEPTH.hud);
+    if (this.stageIndex === 0) {
+      this.tutorialText = this.add.text(GAME_WIDTH / 2, 94, "LEARN THE LOOP  //  BANK ONE SHOT  ·  DODGE  ·  RECLAIM", {
+        fontFamily: '"Segoe UI", sans-serif',
+        fontSize: "14px",
+        fontStyle: "bold",
+        color: "#9ff6e8",
+        backgroundColor: "#0b1722",
+        padding: { x: 10, y: 5 },
+        letterSpacing: 1.1,
+      }).setOrigin(0.5).setDepth(DEPTH.hud);
+    }
   }
 
   private createStage(stage: StageDefinition): void {
@@ -721,6 +749,9 @@ export class BulletReclaimerScene extends Phaser.Scene {
       moveVy: 0,
       nearMissReadyAt: this.time.now + 900,
       shootReadyAt: this.time.now + Phaser.Math.Between(isBoss ? 1000 : 1300, isBoss ? 1500 : 2100),
+      shootTelegraphUntil: 0,
+      shootTargetX: 0,
+      shootTargetY: 0,
     };
   }
 
@@ -749,12 +780,11 @@ export class BulletReclaimerScene extends Phaser.Scene {
     if (Math.abs(this.playerVelocity.x) > 8) this.player.setFlipX(this.playerVelocity.x < 0);
 
     const movement = Math.min(1, this.playerVelocity.length() / PLAYER_SPEED);
-    const runFrame = Math.floor(this.time.now / 72) % 3;
-    const heroTexture = ["hero-run-1", "hero-run-2", "hero-run-3"][runFrame];
-    this.player.setTexture(movement > 0.14 ? heroTexture : "hero");
+    const runFrame = 1 + Math.floor(this.time.now / 88) % 3;
+    this.player.setTexture("hero-art", movement > 0.14 ? runFrame : 0);
     const step = Math.sin(this.time.now * 0.043) * 0.055 * movement;
     const breathing = Math.sin(this.time.now * 0.004) * 0.012 * (1 - movement);
-    this.player.setScale(1.7 - Math.abs(step) * 0.28, 1.7 + step + breathing);
+    this.player.setScale(0.18 - Math.abs(step) * 0.04, 0.18 + step * 0.13 + breathing * 0.08);
   }
 
   private moveEnemies(dt: number): void {
@@ -764,7 +794,10 @@ export class BulletReclaimerScene extends Phaser.Scene {
       if (!enemy.alive) continue;
       this.updateEnemyThreatVisual(enemy, unarmed);
       if (enemy.kind === "boss" && this.updateBossEncounter(enemy, dt, pressureMultiplier)) continue;
-      if (enemy.kind === "shooter") this.updateShooterAttack(enemy);
+      if (enemy.kind === "shooter" && this.updateShooterAttack(enemy)) {
+        this.syncEnemyVisual(enemy);
+        continue;
+      }
       if (enemy.kind !== "boss" && this.updateEnemyDash(enemy, dt, pressureMultiplier, unarmed)) continue;
 
       const navigationTarget = enemy.kind === "shooter"
@@ -847,9 +880,23 @@ export class BulletReclaimerScene extends Phaser.Scene {
     };
   }
 
-  private updateShooterAttack(enemy: Enemy): void {
+  private updateShooterAttack(enemy: Enemy): boolean {
     const now = this.time.now;
-    if (now < enemy.shootReadyAt) return;
+    if (enemy.shootTelegraphUntil > 0) {
+      const direction = new Phaser.Math.Vector2(enemy.shootTargetX - enemy.body.x, enemy.shootTargetY - enemy.body.y).normalize();
+      const flashing = Math.floor(now / 80) % 2 === 0;
+      this.enemyAimGuide.lineStyle(2, 0x8df6ff, flashing ? 0.86 : 0.42)
+        .lineBetween(enemy.body.x, enemy.body.y - 4, enemy.shootTargetX, enemy.shootTargetY);
+      this.enemyAimGuide.lineStyle(1.5, 0xefffff, 0.8).strokeCircle(enemy.shootTargetX, enemy.shootTargetY, 13);
+      enemy.eyeGlow.setFillStyle(0xeaffff, 1).setAlpha(flashing ? 1 : 0.45);
+      if (now < enemy.shootTelegraphUntil) return true;
+      this.spawnEnemyProjectile(enemy.body.x, enemy.body.y - 4, direction.x, direction.y, 300, 0x6ee8ef);
+      enemy.shootTelegraphUntil = 0;
+      enemy.shootReadyAt = now + Phaser.Math.Between(1500, 1950);
+      this.cameras.main.flash(35, 70, 210, 225, false);
+      return true;
+    }
+    if (now < enemy.shootReadyAt) return false;
     const direction = new Phaser.Math.Vector2(this.player.x - enemy.body.x, this.player.y - enemy.body.y);
     const distance = direction.length();
     if (distance < 130 || distance > 610 || !hasClearPath(
@@ -860,13 +907,14 @@ export class BulletReclaimerScene extends Phaser.Scene {
       2,
     )) {
       enemy.shootReadyAt = now + 260;
-      return;
+      return false;
     }
-    direction.scale(1 / distance);
-    this.spawnEnemyProjectile(enemy.body.x, enemy.body.y - 4, direction.x, direction.y, 300, 0x6ee8ef);
-    enemy.shootReadyAt = now + Phaser.Math.Between(1450, 1900);
+    enemy.shootTargetX = this.player.x;
+    enemy.shootTargetY = this.player.y;
+    enemy.shootTelegraphUntil = now + 560;
     enemy.eyeGlow.setAlpha(1);
-    this.cameras.main.flash(45, 70, 210, 225, false);
+    this.showFloatingText(enemy.body.x, enemy.body.y - 30, "LOCK", "#9ef6ff");
+    return true;
   }
 
   private beginBossEntrance(): void {
@@ -981,8 +1029,8 @@ export class BulletReclaimerScene extends Phaser.Scene {
   private startBossPattern(enemy: Enemy): void {
     const phase = enemy.maxHealth - enemy.health + 1;
     const patterns: BossPattern[] = phase >= 3
-      ? ["telegraph-charge", "telegraph-leap", "telegraph-volley", "telegraph-charge"]
-      : ["telegraph-charge", "telegraph-volley", "telegraph-leap"];
+      ? ["telegraph-leap", "telegraph-charge", "telegraph-volley", "telegraph-charge"]
+      : ["telegraph-leap", "telegraph-volley", "telegraph-charge"];
     this.bossPattern = patterns[this.bossPatternIndex++ % patterns.length];
     const direction = new Phaser.Math.Vector2(this.player.x - enemy.body.x, this.player.y - enemy.body.y);
     if (direction.lengthSq() < 1) direction.set(1, 0);
@@ -1654,15 +1702,20 @@ export class BulletReclaimerScene extends Phaser.Scene {
     const direction = new Phaser.Math.Vector2(pointer.worldX - this.player.x, pointer.worldY - this.player.y);
     if (direction.lengthSq() === 0) return;
     direction.normalize();
-
-    let x = this.player.x + direction.x * BULLET_MUZZLE_OFFSET;
-    let y = this.player.y + direction.y * BULLET_MUZZLE_OFFSET;
+    const x = this.player.x + direction.x * BULLET_MUZZLE_OFFSET;
+    const y = this.player.y + direction.y * BULLET_MUZZLE_OFFSET;
+    // Planning shows commitment, not a solved ricochet. Every bounce after this vector is unknown.
+    const hit = this.findRayHit(x, y, direction.x, direction.y, 320);
+    const distance = hit ? Math.min(hit.distance, 320) : 320;
+    const nextX = x + direction.x * distance;
+    const nextY = y + direction.y * distance;
     this.aimGuide.fillStyle(0xe8fffb, 0.92).fillCircle(x, y, 2.5);
-    const hit = this.findRayHit(x, y, direction.x, direction.y, 2000);
-    if (!hit) return;
-    const nextX = x + direction.x * hit.distance;
-    const nextY = y + direction.y * hit.distance;
-    this.drawDashedTrajectory(x, y, nextX, nextY, 0xbaf8ee, 0.72, 1.35);
+    this.drawDashedTrajectory(x, y, nextX, nextY, 0xbaf8ee, 0.86, 2.1);
+    this.aimGuide.fillStyle(0x9ff6e8, 0.85).fillTriangle(
+      nextX + direction.x * 7, nextY + direction.y * 7,
+      nextX - direction.y * 5, nextY + direction.x * 5,
+      nextX + direction.y * 5, nextY - direction.x * 5,
+    );
   }
 
   private drawFreezeOverlay(): void {
@@ -1690,6 +1743,8 @@ export class BulletReclaimerScene extends Phaser.Scene {
       enemy.nextPathAt += frozenFor;
       enemy.dashReadyAt += frozenFor;
       if (enemy.dashUntil > 0) enemy.dashUntil += frozenFor;
+      enemy.shootReadyAt += frozenFor;
+      if (enemy.shootTelegraphUntil > 0) enemy.shootTelegraphUntil += frozenFor;
     }
     this.tensionPulseAt += frozenFor;
     this.aimStartedAt = 0;
@@ -1711,6 +1766,7 @@ export class BulletReclaimerScene extends Phaser.Scene {
     this.bullet.vy = 0;
     this.state = "recover";
     this.recoveryPulse = 0;
+    this.recoveryGraceUntil = this.time.now + RECOVERY_GRACE_MS;
     this.bullet.recoveryDistance = Phaser.Math.Distance.Between(
       this.player.x,
       this.player.y,
@@ -1724,10 +1780,10 @@ export class BulletReclaimerScene extends Phaser.Scene {
       enemy.nextPathAt = 0;
       const recoveryDash = this.stageIndex > 0 && enemy.speed >= 65;
       if (enemy.canDash || recoveryDash) {
-        enemy.dashReadyAt = Math.min(enemy.dashReadyAt, this.time.now + Phaser.Math.Between(420, 820));
+        enemy.dashReadyAt = Math.min(enemy.dashReadyAt, this.recoveryGraceUntil + Phaser.Math.Between(220, 540));
       }
     }
-    this.showFloatingText(GAME_WIDTH / 2, 126, "RECOVERY HUNT", "#ffb36b");
+    this.showFloatingText(GAME_WIDTH / 2, 126, "RECOVERY HUNT // 0.7s WINDOW", "#ffda81");
     this.updateHud();
   }
 
@@ -1912,6 +1968,7 @@ export class BulletReclaimerScene extends Phaser.Scene {
     this.scoreText.setText(`SCORE ${this.score.toString().padStart(6, "0")}`);
     this.updateRiskDisplay();
     this.stageText.setAlpha(this.state === "aiming" ? 1 : 0.82);
+    this.tutorialText?.setVisible(this.state === "playing" || this.state === "aiming");
   }
 
   private updateRiskDisplay(): void {
@@ -1946,6 +2003,6 @@ export class BulletReclaimerScene extends Phaser.Scene {
   }
 
   private restartStage(): void {
-    this.scene.restart({ stageIndex: this.stageIndex, showTitle: false, score: this.score });
+    this.scene.restart({ stageIndex: this.stageIndex, showTitle: false, score: 0 });
   }
 }
