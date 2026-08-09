@@ -16,3 +16,7 @@ export function isEnemyMovementBlocked(
 ): boolean {
   return currentSpeed > chaseSpeed * 0.6 && movedDistance < requestedDistance * 0.2;
 }
+
+export function recoveryIndicatorDistance(distanceToBullet: number): number {
+  return Math.max(0, Math.min(72, distanceToBullet - 12));
+}

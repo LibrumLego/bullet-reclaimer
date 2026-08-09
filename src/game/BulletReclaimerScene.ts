@@ -17,7 +17,12 @@ import { findNavigationPath, hasClearPath } from "./pathfinding";
 import { calculateRiskReward, enemyPressureMultiplier } from "./risk";
 import { SoundManager } from "./SoundManager";
 import { STAGES } from "./stages";
-import { canEnemiesMove, canPlayerMove, isEnemyMovementBlocked } from "./stateRules";
+import {
+  canEnemiesMove,
+  canPlayerMove,
+  isEnemyMovementBlocked,
+  recoveryIndicatorDistance,
+} from "./stateRules";
 import type { Bullet, Enemy, EnemyDefinition, EnemyProjectile, GameState, StageDefinition } from "./types";
 
 type Impact =
@@ -1029,8 +1034,13 @@ export class BulletReclaimerScene extends Phaser.Scene {
   }
 
   private finishBossPattern(delay: number): void {
-    this.bossPattern = "none";
+    this.clearBossPatternEffects();
     this.bossPatternNextAt = this.time.now + delay;
+  }
+
+  private clearBossPatternEffects(): void {
+    this.bossPattern = "none";
+    this.bossPatternUntil = 0;
     this.bossTelegraph.clear();
     this.hideBossPattern();
   }
@@ -1480,6 +1490,10 @@ export class BulletReclaimerScene extends Phaser.Scene {
     }
 
     enemy.alive = false;
+    if (enemy.kind === "boss") {
+      this.clearBossPatternEffects();
+      this.bossPatternNextAt = Number.POSITIVE_INFINITY;
+    }
     this.awardEnemyKill(enemy);
     this.burst(enemy.body.x, enemy.body.y, enemy.kind === "boss" ? 0xc77dff : 0xff637b, enemy.kind === "boss" ? 32 : 16);
     this.cameras.main.shake(enemy.kind === "boss" ? 260 : 100, enemy.kind === "boss" ? 0.012 : 0.004);
@@ -1643,44 +1657,12 @@ export class BulletReclaimerScene extends Phaser.Scene {
 
     let x = this.player.x + direction.x * BULLET_MUZZLE_OFFSET;
     let y = this.player.y + direction.y * BULLET_MUZZLE_OFFSET;
-    let vx = direction.x;
-    let vy = direction.y;
     this.aimGuide.fillStyle(0xe8fffb, 0.92).fillCircle(x, y, 2.5);
-    for (let i = 0; i < MAX_BOUNCES; i++) {
-      const hit = this.findRayHit(x, y, vx, vy, 2000);
-      if (!hit) break;
-      const nextX = x + vx * hit.distance;
-      const nextY = y + vy * hit.distance;
-      const selfHit = i > 0
-        ? segmentCircleHit(x, y, nextX, nextY, this.player.x, this.player.y, PLAYER_RADIUS + BULLET_RADIUS + 2)
-        : undefined;
-      const segmentColor = selfHit !== undefined ? 0xff817d : i === 0 ? 0xbaf8ee : 0x78aeb5;
-      const segmentAlpha = selfHit !== undefined ? 0.95 : Math.max(0.3, 0.72 - i * 0.09);
-      this.drawDashedTrajectory(x, y, nextX, nextY, segmentColor, segmentAlpha, selfHit !== undefined ? 2.4 : 1.35);
-
-      if (selfHit !== undefined) {
-        const dangerX = Phaser.Math.Linear(x, nextX, selfHit);
-        const dangerY = Phaser.Math.Linear(y, nextY, selfHit);
-        this.aimGuide.lineStyle(2, 0xff817d, 0.95)
-          .lineBetween(dangerX - 7, dangerY - 7, dangerX + 7, dangerY + 7)
-          .lineBetween(dangerX + 7, dangerY - 7, dangerX - 7, dangerY + 7);
-        this.aimWarningText
-          .setPosition(
-            Phaser.Math.Clamp(dangerX, ARENA.left + 56, ARENA.right - 56),
-            Phaser.Math.Clamp(dangerY - 28, ARENA.top + 18, ARENA.bottom - 18),
-          )
-          .setVisible(true);
-        break;
-      }
-
-      const markerAlpha = Math.max(0.3, 0.82 - i * 0.1);
-      this.aimGuide.lineStyle(1.5, 0x9de9df, markerAlpha)
-        .strokeRect(nextX - 4, nextY - 4, 8, 8);
-      x = nextX + hit.normalX * 1.5;
-      y = nextY + hit.normalY * 1.5;
-      if (hit.normalX) vx *= -1;
-      if (hit.normalY) vy *= -1;
-    }
+    const hit = this.findRayHit(x, y, direction.x, direction.y, 2000);
+    if (!hit) return;
+    const nextX = x + direction.x * hit.distance;
+    const nextY = y + direction.y * hit.distance;
+    this.drawDashedTrajectory(x, y, nextX, nextY, 0xbaf8ee, 0.72, 1.35);
   }
 
   private drawFreezeOverlay(): void {
@@ -1779,6 +1761,7 @@ export class BulletReclaimerScene extends Phaser.Scene {
   private win(): void {
     this.stopBullet();
     this.state = "won";
+    this.clearBossPatternEffects();
     this.combatTimeScale = 1;
     this.time.timeScale = 1;
     this.hideBulletForResult();
@@ -1795,6 +1778,7 @@ export class BulletReclaimerScene extends Phaser.Scene {
   private lose(): void {
     if (this.state === "lost" || this.state === "won") return;
     this.state = "lost";
+    this.clearBossPatternEffects();
     this.combatTimeScale = 1;
     this.time.timeScale = 1;
     this.hideBulletForResult();
@@ -1875,23 +1859,11 @@ export class BulletReclaimerScene extends Phaser.Scene {
       if (distance > 1) {
         direction.normalize();
         const perpendicular = new Phaser.Math.Vector2(-direction.y, direction.x);
-        const farAway = distance > 260;
-        const horizontalLimit = direction.x > 0
-          ? (ARENA.right - 34 - this.player.x) / direction.x
-          : direction.x < 0
-            ? (ARENA.left + 34 - this.player.x) / direction.x
-            : Number.POSITIVE_INFINITY;
-        const verticalLimit = direction.y > 0
-          ? (ARENA.bottom - 34 - this.player.y) / direction.y
-          : direction.y < 0
-            ? (ARENA.top + 34 - this.player.y) / direction.y
-            : Number.POSITIVE_INFINITY;
-        const edgeDistance = Math.max(70, Math.min(horizontalLimit, verticalLimit));
-        const indicatorDistance = farAway ? edgeDistance : 60;
+        const indicatorDistance = recoveryIndicatorDistance(distance);
         const tipX = this.player.x + direction.x * indicatorDistance;
         const tipY = this.player.y + direction.y * indicatorDistance;
-        const startX = tipX - direction.x * (farAway ? 38 : 32);
-        const startY = tipY - direction.y * (farAway ? 38 : 32);
+        const startX = tipX - direction.x * 32;
+        const startY = tipY - direction.y * 32;
         const color = this.state === "recover" ? 0xffd76b : 0xff9a63;
         const distancePressure = Phaser.Math.Clamp((distance - 180) / 500, 0, 1);
         const arrowPulse = 0.68 + Math.sin(this.time.now * (0.012 + distancePressure * 0.01)) * 0.26;

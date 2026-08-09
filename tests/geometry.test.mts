@@ -104,3 +104,38 @@ test("every stage four enemy can find a route to the player", () => {
     assert.ok(findNavigationPath(enemy, player, arena, obstacles, 12).length > 0);
   }
 });
+
+test("crossfire enemies route into the compressed space above the right wall", () => {
+  const authoredArena = { x: 54, y: 86, width: 1172, height: 574 };
+  const arena = { x: 160, y: 123, width: 960, height: 500 };
+  const authoredObstacles = [
+    { x: 320, y: 120, width: 74, height: 210 },
+    { x: 320, y: 450, width: 74, height: 170 },
+    { x: 555, y: 275, width: 180, height: 72 },
+    { x: 555, y: 470, width: 180, height: 72 },
+    { x: 895, y: 120, width: 72, height: 220 },
+    { x: 895, y: 445, width: 72, height: 175 },
+  ];
+  const scaleX = arena.width / authoredArena.width;
+  const scaleY = arena.height / authoredArena.height;
+  const compactPoint = (point: { x: number; y: number }) => ({
+    x: arena.x + (point.x - authoredArena.x) * scaleX,
+    y: arena.y + (point.y - authoredArena.y) * scaleY,
+  });
+  const obstacles = authoredObstacles.map((obstacle) => ({
+    ...compactPoint(obstacle),
+    width: obstacle.width * scaleX,
+    height: obstacle.height * scaleY,
+  }));
+  const enemy = compactPoint({ x: 815, y: 260 });
+  const player = { x: compactPoint({ x: 1050, y: 100 }).x, y: arena.y + 12 };
+  const path = findNavigationPath(enemy, player, arena, obstacles, 12);
+
+  assert.ok(path.length > 0);
+  let previous = enemy;
+  for (const waypoint of path) {
+    assert.equal(hasClearPath(previous, waypoint, arena, obstacles, 12), true);
+    previous = waypoint;
+  }
+  assert.deepEqual(path.at(-1), player);
+});

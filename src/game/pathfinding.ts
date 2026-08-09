@@ -186,9 +186,13 @@ export const findNavigationPath = (
       { x: obstacle.x + obstacle.width + cornerPadding, y: obstacle.y - cornerPadding },
       { x: obstacle.x - cornerPadding, y: obstacle.y + obstacle.height + cornerPadding },
       { x: obstacle.x + obstacle.width + cornerPadding, y: obstacle.y + obstacle.height + cornerPadding },
-    ];
+    ].map((corner) => ({
+      x: Math.max(arena.x + radius, Math.min(arena.x + arena.width - radius, corner.x)),
+      y: Math.max(arena.y + radius, Math.min(arena.y + arena.height - radius, corner.y)),
+    }));
     for (const corner of corners) {
-      if (isWalkable(corner, arena, obstacles, radius)) nodes.push(corner);
+      if (isWalkable(corner, arena, obstacles, radius)
+        && !nodes.some((node) => distance(node, corner) < 0.01)) nodes.push(corner);
     }
   }
 
